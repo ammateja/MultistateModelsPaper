@@ -1,4 +1,4 @@
-Package: multistatemodels_paper
+Package: MultistateModelsPaper
 Title: Stable Version of Wrapper for MultistateModels.jl
 Version: 0.0.0.9000
 Authors@R: 
