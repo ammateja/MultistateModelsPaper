@@ -32,7 +32,7 @@ You can install MultistateModelsPaper from
 
 ```{r, warning=FALSE, message=FALSE}
 # install.packages("devtools")
-devtools::install_github("ammateja/multistatemodels_paper")
+devtools::install_github("ammateja/MultistateModelsPaper")
 ```
 
 ```{r, warning=FALSE, message=FALSE}

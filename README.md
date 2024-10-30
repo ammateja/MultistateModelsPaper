@@ -21,7 +21,7 @@ with:
 
 ``` r
 # install.packages("devtools")
-devtools::install_github("ammateja/multistatemodels_paper")
+devtools::install_github("ammateja/MultistateModelsPaper")
 ```
 
 ``` r
