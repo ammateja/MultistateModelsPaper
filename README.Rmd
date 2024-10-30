@@ -13,12 +13,12 @@ knitr::opts_chunk$set(
 )
 ```
 
-# multistatemodels_paper
+# MultistateModelsPaper
 
 <!-- badges: start -->
 <!-- badges: end -->
 
-multistatemodels_paper provides a package for simulating and fitting multistate models
+MultistateModelsPaper provides a package for simulating and fitting multistate models
 especially semi-Markov models, to panel data and interval censored data. 
 This is a wrapper to the Julia package MultistateModels.jl. 
 This version of the package is a stable version used to accompany the paper
@@ -27,16 +27,20 @@ This version of the package is a stable version used to accompany the paper
 
 ## Installation
 
-You can install the development version of multistatemodels_paper from
+You can install MultistateModelsPaper from
 [GitHub](https://github.com/) with:
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 # install.packages("devtools")
 devtools::install_github("ammateja/multistatemodels_paper")
 ```
 
+```{r, warning=FALSE, message=FALSE}
+library(MultistateModelsPaper)
+```
 
-The vignette `illness death` shows how to fit a basic 3-state illness-death model. 
+
+The vignette `illness-death` shows how to fit a basic 3-state illness-death model. 
 In this simple setting, patients are healthy at the start of follow-
 up. The model has three states – healthy, ill, and dead – and three transitions — healthy to ill,
 healthy to dead, and ill to dead. Disease recurrence is interval censored but the time
