@@ -1,4 +1,4 @@
-library(multistatemodels)
+library(multistatemodels_paper)
 library(dplyr)
 
 set.seed(1)
