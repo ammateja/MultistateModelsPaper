@@ -16,7 +16,6 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   warning=FALSE, 
   message=FALSE,
-  cache=TRUE,
   comment = "#>"
 )
 set.seed(1)
@@ -78,7 +77,8 @@ if (JuliaConnectoR::juliaSetupOk()){
        import Pkg
        Pkg.add(url = "https://github.com/fintzij/MultistateModels.jl.git")
        Pkg.add("CSV")
-       Pkg.add("DataFrames")')
+       Pkg.add("DataFrames")
+       Pkg.add("Random")')
   } else {
     stop("Julia setup incorrect.
          Ensure Julia version >= 1.10 is properly installed.")
@@ -93,7 +93,7 @@ You can install MultistateModelsPaper from
 
 ```{r, class.source='fold-show', warning=FALSE, message=FALSE}
 #install.packages("devtools")
-devtools::install_github("ammateja/MultistateModelsPaper")
+devtools::install_github("ammateja/MultistateModelsPaper", quiet=TRUE, build_vignettes = FALSE)
 library(MultistateModelsPaper)
 ```
 
@@ -149,6 +149,7 @@ For this initial dataset, both `statefrom` and `stateto` are equal to 1, and `ob
 
 ```{r}
 #Initialize empty data frame and loop through each subject
+set.seed(1)
 data <- NULL
 for (i in 1:250) {
   #create observation times
@@ -188,6 +189,8 @@ model_sim <- multistatemodels::set_parameters(model=model, newvalues=parameters)
 Using that dataset, we simulate sample paths for each subject.
 
 ```{r}
+JuliaConnectoR::juliaEval("using Random")
+JuliaConnectoR::juliaEval("Random.seed!(0)")
 #Simulate one sample path per subject
 paths <- multistatemodels::simulate(model=model_sim, nsim=1, paths=TRUE, data=FALSE)
 ```
@@ -317,6 +320,7 @@ In order to obtain the maximum likelihood estimates for functionals of interest,
 
 
 ```{r}
+JuliaConnectoR::juliaEval("Random.seed!(0)")
 #Set up model for simulation with data from fitted model
 model_sim2 <- multistatemodels::multistatemodel(hazard = c(h12_sp, h13_sp, h23_sp), data=as.data.frame(model_sim$data))
 
@@ -492,7 +496,11 @@ asymptotic_bootstrap_incidence <- function(model, pars, vcov, sims_per_subj, nbo
 ```
 
 ```{r, echo=F}
-inc_cis <- asymptotic_bootstrap_incidence(model_sim2, JuliaConnectoR::juliaGet(model_fitted$parameters)$data, model_fitted$vcov, 20, 1000)
+#JuliaConnectoR::juliaEval("Random.seed!(0)")
+#set.seed(1)
+#inc_cis <- asymptotic_bootstrap_incidence(model_sim2, JuliaConnectoR::juliaGet(model_fitted$parameters)$data, model_fitted$vcov, 20, 1000)
+
+inc_cis <- readRDS("cis.RDS")
 ```
 
 The plot below shows the prevalence in each compartment. 
@@ -534,4 +542,6 @@ ggplot() +
   scale_x_continuous(breaks = seq(0, 1, 0.1)) +
   scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 25))
 ```
+
+
 
