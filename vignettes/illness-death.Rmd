@@ -54,19 +54,15 @@ First, ensure `Julia` (<span>&#8805;</span> version 1.10) is installed. After in
 library(JuliaConnectoR)
 ```
 
-`dplyr`, `ggplot2`, `flextable`, `knitr`, and `kableExtra` are also required for this vignette:
+`dplyr`, `ggplot2`, `knitr`, and `kableExtra` are also required for this vignette:
 
 ```{r, class.source='fold-show'}
 #install.packages("dplyr")
 #install.packages("ggplot2")
-#install.packages("flextable")
 #install.packages("knitr")
 #install.packages("kableExtra")
-library(dplyr)
 library(ggplot2)
-library(flextable)
-library(knitr)
-library(kableExtra)
+library(dplyr)
 ```
 
 The necessary Julia functions can be installed by running the following code:
@@ -93,7 +89,7 @@ You can install MultistateModelsPaper from
 
 ```{r, class.source='fold-show', warning=FALSE, message=FALSE}
 #install.packages("devtools")
-devtools::install_github("ammateja/MultistateModelsPaper", quiet=TRUE, build_vignettes = FALSE)
+devtools::install_github("ammateja/MultistateModelsPaper", quiet=TRUE, build_vignettes = TRUE)
 library(MultistateModelsPaper)
 ```
 
@@ -174,16 +170,16 @@ set to the starting values as described in `makepars` above.
 
 ```{r}
 #set all hazards to be Weibull
-h12 <- multistatemodels::Hazard(formula = 0~1, statefrom = 1, stateto=2, family="wei")
-h13 <- multistatemodels::Hazard(formula = 0~1, statefrom = 1, stateto=3, family="wei")
-h23 <- multistatemodels::Hazard(formula = 0~1, statefrom = 2, stateto=3, family="wei")
+h12 <- MultistateModelsPaper::Hazard(formula = 0~1, statefrom = 1, stateto=2, family="wei")
+h13 <- MultistateModelsPaper::Hazard(formula = 0~1, statefrom = 1, stateto=3, family="wei")
+h23 <- MultistateModelsPaper::Hazard(formula = 0~1, statefrom = 2, stateto=3, family="wei")
 
 #Initalize model
-model <- multistatemodels::multistatemodel(hazard = c(h12, h13, h23), data=data)
+model <- MultistateModelsPaper::multistatemodel(hazard = c(h12, h13, h23), data=data)
 #Starting parameters
 parameters <- makepars()
 #Set parameters
-model_sim <- multistatemodels::set_parameters(model=model, newvalues=parameters)
+model_sim <- MultistateModelsPaper::set_parameters(model=model, newvalues=parameters)
 ```
 
 Using that dataset, we simulate sample paths for each subject.
@@ -192,7 +188,7 @@ Using that dataset, we simulate sample paths for each subject.
 JuliaConnectoR::juliaEval("using Random")
 JuliaConnectoR::juliaEval("Random.seed!(0)")
 #Simulate one sample path per subject
-paths <- multistatemodels::simulate(model=model_sim, nsim=1, paths=TRUE, data=FALSE)
+paths <- MultistateModelsPaper::simulate(model=model_sim, nsim=1, paths=TRUE, data=FALSE)
 ```
 
 
@@ -267,7 +263,7 @@ The setup of this dataset is shown below:
 
 
 ```{r, echo=FALSE}
-kable(dat, "html") %>% kable_styling() %>% scroll_box(width = "800px", height = "300px")
+knitr::kable(dat, "html") %>% kableExtra::kable_styling() %>% kableExtra::scroll_box(width = "800px", height = "300px")
 ```
 
 
@@ -304,16 +300,16 @@ knots13 <- c(0, quantile(JuliaConnectoR::juliaLet("MultistateModels.extract_sojo
 knots23 <- c(0, quantile(JuliaConnectoR::juliaLet("MultistateModels.extract_sojourns(2, 3, MultistateModels.extract_paths(dat))", dat=JuliaConnectoR::juliaCall("DataFrame", dat)), c(0.5, 1)))
 
 #Set transition intensity for each transition to be a degree 1 spline, interior knot at median, and boundary knots at 0 and max    
-h12_sp <- multistatemodels::Hazard(formula = 0~1, statefrom = 1, stateto=2, family="sp", degree=1, knots = knots12[-c(1, length(knots12))], boundaryknots = knots12[c(1, length(knots12))], extrapolation = "flat")
-h13_sp <- multistatemodels::Hazard(formula = 0~1, statefrom = 1, stateto=3, family="sp", degree=1, knots = knots13[-c(1, length(knots13))], boundaryknots = knots13[c(1, length(knots13))], extrapolation = "flat")
-h23_sp <- multistatemodels::Hazard(formula = 0~1, statefrom = 2, stateto=3, family="sp", degree=1, knots = knots23[-c(1, length(knots23))], boundaryknots = knots23[c(1, length(knots23))], extrapolation = "flat")
+h12_sp <- MultistateModelsPaper::Hazard(formula = 0~1, statefrom = 1, stateto=2, family="sp", degree=1, knots = knots12[-c(1, length(knots12))], boundaryknots = knots12[c(1, length(knots12))], extrapolation = "flat")
+h13_sp <- MultistateModelsPaper::Hazard(formula = 0~1, statefrom = 1, stateto=3, family="sp", degree=1, knots = knots13[-c(1, length(knots13))], boundaryknots = knots13[c(1, length(knots13))], extrapolation = "flat")
+h23_sp <- MultistateModelsPaper::Hazard(formula = 0~1, statefrom = 2, stateto=3, family="sp", degree=1, knots = knots23[-c(1, length(knots23))], boundaryknots = knots23[c(1, length(knots23))], extrapolation = "flat")
 
 #Set up model
-model_fit <- multistatemodels::multistatemodel(hazard = c(h12_sp, h13_sp, h23_sp), data=dat)
+model_fit <- MultistateModelsPaper::multistatemodel(hazard = c(h12_sp, h13_sp, h23_sp), data=dat)
 #initialize parameters to set the starting values of the transition intensities to MLEs of the Markov model
-model_fit <- multistatemodels::initialize_parameters(model = model_fit)
+model_fit <- MultistateModelsPaper::initialize_parameters(model = model_fit)
 #Fi the model
-model_fitted <- multistatemodels::fit(model = model_fit, verbose=TRUE, compute_vcov = TRUE, ess_target_initial = 50, ascent_threshold = 0.2, stopping_threshold = 0.2, tol = 0.001)
+model_fitted <- MultistateModelsPaper::fit(model = model_fit, verbose=TRUE, compute_vcov = TRUE, ess_target_initial = 50, ascent_threshold = 0.2, stopping_threshold = 0.2, tol = 0.001)
 ```
 
 In order to obtain the maximum likelihood estimates for functionals of interest, we simulate 20 paths per subject from this fitted model.
@@ -322,13 +318,13 @@ In order to obtain the maximum likelihood estimates for functionals of interest,
 ```{r}
 JuliaConnectoR::juliaEval("Random.seed!(0)")
 #Set up model for simulation with data from fitted model
-model_sim2 <- multistatemodels::multistatemodel(hazard = c(h12_sp, h13_sp, h23_sp), data=as.data.frame(model_sim$data))
+model_sim2 <- MultistateModelsPaper::multistatemodel(hazard = c(h12_sp, h13_sp, h23_sp), data=as.data.frame(model_sim$data))
 
 #Set parameters to MLEs of fitted model
-model_sim2 <- multistatemodels::set_parameters(model = model_sim2, newvalues = list(JuliaConnectoR::juliaGet(model_fitted$parameters[1])$data, JuliaConnectoR::juliaGet(model_fitted$parameters[2])$data, JuliaConnectoR::juliaGet(model_fitted$parameters[3])$data))
+model_sim2 <- MultistateModelsPaper::set_parameters(model = model_sim2, newvalues = list(JuliaConnectoR::juliaGet(model_fitted$parameters[1])$data, JuliaConnectoR::juliaGet(model_fitted$parameters[2])$data, JuliaConnectoR::juliaGet(model_fitted$parameters[3])$data))
 
 #Simulate 20 paths per subject
-paths_sim <- multistatemodels::simulate(model = model_sim2, nsim = 20, paths = TRUE, data = FALSE)
+paths_sim <- MultistateModelsPaper::simulate(model = model_sim2, nsim = 20, paths = TRUE, data = FALSE)
 ```
 
 In this single example, we show prevalence in each compartment, and cumulative incidence of illness and death. 
@@ -341,13 +337,13 @@ Confidence intervals are obtained by summarizing sample paths simulated from the
 times <- seq(0, 1, 0.05)
 times_new <- seq(0, 1, 0.01)
 
-intervals <- bind_rows(lapply(paths, function(x){as.data.frame(cbind(times, rep(x$subj, length(times)), findInterval(times, x$times), x$states[findInterval(times, x$times)]))}))
+intervals <- dplyr::bind_rows(lapply(paths, function(x){as.data.frame(cbind(times, rep(x$subj, length(times)), findInterval(times, x$times), x$states[findInterval(times, x$times)]))}))
 
-times_summary <- intervals %>% group_by(times, V4) %>% dplyr::summarize(n=n(), per=100*(n/length(paths)), .groups="drop")
+times_summary <- intervals %>% dplyr::group_by(times, V4) %>% dplyr::summarize(n=n(), per=100*(n/length(paths)), .groups="drop")
 
-intervals_mod <- bind_rows(lapply(paths_sim, function(x){as.data.frame(cbind(times_new, rep(x$subj, length(times_new)), findInterval(times_new, x$times), x$states[findInterval(times_new, x$times)]))}))
+intervals_mod <- dplyr::bind_rows(lapply(paths_sim, function(x){as.data.frame(cbind(times_new, rep(x$subj, length(times_new)), findInterval(times_new, x$times), x$states[findInterval(times_new, x$times)]))}))
 
-times_summary_mod <- intervals_mod %>% group_by(times_new, factor(V4), .drop=FALSE) %>% dplyr::summarize(n=n(), per=100*(n/length(paths_sim)), .groups="drop")
+times_summary_mod <- intervals_mod %>% dplyr::group_by(times_new, factor(V4), .drop=FALSE) %>% dplyr::summarize(n=n(), per=100*(n/length(paths_sim)), .groups="drop")
 ```
 
 
@@ -444,8 +440,8 @@ asymptotic_bootstrap_incidence <- function(model, pars, vcov, sims_per_subj, nbo
       newvalues[[i]] <- pardraws[elem_ptr[i]:(elem_ptr[i+1]-1)]
     }
     
-    model <- multistatemodels::set_parameters(model=model, newvalues = newvalues)
-    paths_sim <- multistatemodels::simulate(model=model, nsim = sims_per_subj, paths=TRUE, data=FALSE)
+    model <- MultistateModelsPaper::set_parameters(model=model, newvalues = newvalues)
+    paths_sim <- MultistateModelsPaper::simulate(model=model, nsim = sims_per_subj, paths=TRUE, data=FALSE)
     
     inc2_mod <- rep(1, length(paths_sim))
     inc3_mod <- rep(1, length(paths_sim))

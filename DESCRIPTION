@@ -28,5 +28,9 @@ Depends:
 LazyData: true
 Suggests: 
     knitr,
-    rmarkdown
+    rmarkdown, 
+    kableExtra, 
+    ggplot2, 
+    devtools,
+    dplyr
 VignetteBuilder: knitr
