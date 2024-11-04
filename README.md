@@ -14,17 +14,54 @@ used to accompany the paper “Assessing treatment efficacy for interval
 censored endpoints using multistate semi-Markov models fit to multiple
 data streams”.
 
-## Installation
+## Installation and Setup
+
+First, ensure `Julia` (≥ version 1.10) is installed. After installing
+Julia, ensure that the `JuliaConnectoR` R package has been installed and
+loaded.
+
+``` r
+#install.packages("JuliaConnectoR")
+library(JuliaConnectoR)
+```
+
+`dplyr`, `ggplot2`, `knitr`, and `kableExtra` are also required to be
+installed:
+
+``` r
+install.packages("dplyr")
+install.packages("ggplot2")
+install.packages("knitr")
+install.packages("kableExtra")
+```
+
+The necessary Julia functions can be installed by running the following
+code:
+
+``` r
+if (JuliaConnectoR::juliaSetupOk()){
+    JuliaConnectoR::juliaEval('
+       import Pkg
+       Pkg.add(url = "https://github.com/fintzij/MultistateModels.jl.git")
+       Pkg.add("CSV")
+       Pkg.add("DataFrames")
+       Pkg.add("Random")')
+  } else {
+    stop("Julia setup incorrect.
+         Ensure Julia version >= 1.10 is properly installed.")
+  }
+```
+
+If there is an error, it means that Julia has not been installed
+correctly. See the help page for the `JuliaConnectoR-package` for more
+details.
 
 You can install MultistateModelsPaper from [GitHub](https://github.com/)
 with:
 
 ``` r
-# install.packages("devtools")
+#install.packages("devtools")
 devtools::install_github("ammateja/MultistateModelsPaper", quiet=TRUE, build_vignettes = TRUE)
-```
-
-``` r
 library(MultistateModelsPaper)
 ```
 
