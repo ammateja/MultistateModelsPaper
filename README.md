@@ -16,7 +16,8 @@ data streams”.
 
 ## Installation and Setup
 
-First, ensure `Julia` (≥ version 1.10) is installed. After installing
+First, ensure `Julia` (≥ version 1.10) is installed. Julia can be
+downloaded from <https://julialang.org/downloads/>. After installing
 Julia, ensure that the `JuliaConnectoR` R package has been installed and
 loaded.
 
