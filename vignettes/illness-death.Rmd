@@ -22,7 +22,15 @@ set.seed(1)
 ```
 
 
+
 # Overview
+
+Note that if you would like to extract the code directly from this document into an R script, the following command can be ran:
+
+```{r, class.source='fold-show', eval=F}
+knitr::purl(input="illness-death.Rmd")
+```
+
 
 This vignette demonstrates how to simulate from and fit an illness-death model using the `MultistateModelsPaper` R package, 
 which is based on the `MultistateModels.jl` Julia package. 
@@ -34,7 +42,7 @@ healthy to dead, and ill to dead. Disease recurrence is interval censored but th
 of death is exactly observed.
 
 
-```{r, echo=FALSE, fig.cap="Direct transitions between states in a progressive illness-death model."}
+```{r, echo=FALSE, fig.cap="Direct transitions between states in a progressive illness-death model.", purl=F}
 knitr::include_graphics("illness_death.PNG")
 ```
 
@@ -47,7 +55,7 @@ roughly every 1 month over 1 year of follow-up.
 
 # Installation and Setup
 
-First, ensure `Julia` (<span>&#8805;</span> version 1.10) is installed. Julia can be downloaded from https://julialang.org/downloads/. Julia must be added to the system PATH; instructions can be found here: https://julialang.org/downloads/platform/. After installing Julia, ensure that the `JuliaConnectoR` R package has been installed and loaded.
+First, ensure `Julia` (<span>&#8805;</span> version 1.10) is installed. Julia can be downloaded from https://julialang.org/downloads/. Julia must be added to the system PATH; instructions can be found here: https://julialang.org/downloads/platform/. After installing Julia, ensure that the `JuliaConnectoR` R package has been installed and loaded. This package depends on having R version <span>&#8805;</span> 3.2).
 
 ```{r, class.source='fold-show'}
 #install.packages("JuliaConnectoR")
@@ -67,7 +75,7 @@ library(dplyr)
 
 The necessary Julia functions can be installed by running the following code:
 
-```{r, class.source='fold-show', eval=FALSE}
+```{r, class.source='fold-show', warning=FALSE, message=F}
 if (JuliaConnectoR::juliaSetupOk()){
     JuliaConnectoR::juliaEval('
        import Pkg
@@ -89,7 +97,7 @@ You can install MultistateModelsPaper from
 
 ```{r, class.source='fold-show', warning=FALSE, message=FALSE}
 #install.packages("devtools")
-devtools::install_github("ammateja/MultistateModelsPaper", quiet=TRUE, build_vignettes = TRUE)
+devtools::install_github("ammateja/MultistateModelsPaper", quiet=TRUE)
 library(MultistateModelsPaper)
 ```
 
@@ -99,7 +107,7 @@ library(MultistateModelsPaper)
 The function `makepars` (click to show code) sets the Weibull baseline intensities for all three transitions. 
 The parameters are shown in the table below:
 
-```{r, echo=FALSE, fig.cap="Parameterization and parameter values for transition intensities in the simulation model."}
+```{r, echo=FALSE, fig.cap="Parameterization and parameter values for transition intensities in the simulation model.", purl=F}
 knitr::include_graphics("weibull.PNG")
 ```
 
@@ -262,7 +270,7 @@ dat <- observe_subjdat(paths, model_sim)
 The setup of this dataset is shown below: 
 
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, purl=F}
 knitr::kable(dat, "html") %>% kableExtra::kable_styling() %>% kableExtra::scroll_box(width = "800px", height = "300px")
 ```
 
@@ -271,7 +279,7 @@ We can now re-create the model with the simulated data, according to one of the 
 In this example, we use linear splines. 
 
 
-```{r, echo=FALSE, fig.cap="Parameterization of transition intensities for illness-death models."}
+```{r, echo=FALSE, fig.cap="Parameterization of transition intensities for illness-death models.", purl=F}
 knitr::include_graphics("parameterizations.PNG")
 ```
 

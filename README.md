@@ -21,7 +21,7 @@ downloaded from <https://julialang.org/downloads/>. Julia must be added
 to the system PATH; instructions can be found here:
 <https://julialang.org/downloads/platform/>. After installing Julia,
 ensure that the `JuliaConnectoR` R package has been installed and
-loaded.
+loaded. This package depends on having R version ≥ 3.2).
 
 ``` r
 #install.packages("JuliaConnectoR")
