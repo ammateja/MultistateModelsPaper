@@ -28,6 +28,18 @@ loaded. This package depends on having R version ≥ 3.2).
 library(JuliaConnectoR)
 ```
 
+Once the `JuliaConnectoR` package is loaded, the following code can be
+run to ensure Julia is installed correctly:
+
+``` r
+JuliaConnectoR::juliaSetupOk()
+#> [1] TRUE
+```
+
+If `Julia` is properly installed, this will return `TRUE`. If `FALSE` is
+returned, it means that `Julia` has not been installed correctly. See
+the help page for the `JuliaConnectoR-package` for more details.
+
 `dplyr`, `ggplot2`, `knitr`, and `kableExtra` are also required to be
 installed:
 
@@ -45,7 +57,7 @@ code:
 if (JuliaConnectoR::juliaSetupOk()){
     JuliaConnectoR::juliaEval('
        import Pkg
-       Pkg.add(url = "https://github.com/fintzij/MultistateModels.jl.git")
+       Pkg.add(url = "https://github.com/fintzij/MultistateModels.jl#biostatistics_manuscript_2024")
        Pkg.add("CSV")
        Pkg.add("DataFrames")
        Pkg.add("Random")')
@@ -55,9 +67,8 @@ if (JuliaConnectoR::juliaSetupOk()){
   }
 ```
 
-If there is an error, it means that Julia has not been installed
-correctly. See the help page for the `JuliaConnectoR-package` for more
-details.
+If there is an error, see the help page for the `JuliaConnectoR-package`
+for more details.
 
 You can install MultistateModelsPaper from [GitHub](https://github.com/)
 with:

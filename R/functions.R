@@ -35,7 +35,7 @@ multistatemodels_setup <- function() {
   if (JuliaConnectoR::juliaSetupOk()){
     JuliaConnectoR::juliaEval('
        import Pkg
-       Pkg.add(url = "https://github.com/fintzij/MultistateModels.jl.git")
+       Pkg.add(url = ""https://github.com/fintzij/MultistateModels.jl#biostatistics_manuscript_2024"")
        Pkg.add("CSV")
        Pkg.add("DataFrames")')
   }

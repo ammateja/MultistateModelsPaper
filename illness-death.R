@@ -1,17 +1,4 @@
----
-title: "Fitting a multistate illness-death model using the multistatemodels package"
-author: "Allyson Mateja, Rapha&euml;l Morsomme, C. Jason Liang, Dean A. Follmann, Meagan P. O'Brien, Chenguang Wang, Jonathan Fintzi"
-date: "`r Sys.Date()`"
-output: 
-  rmarkdown::html_vignette:
-    code_folding: hide
-vignette: >
-  %\VignetteIndexEntry{Fitting a multistate illness-death model using the multistatemodels package}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
----
-
-```{r setup, include = FALSE}
+## ----setup, include = FALSE------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   warning=FALSE, 
@@ -19,75 +6,33 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 set.seed(1)
-```
+
+
+## ----class.source='fold-show', eval=F--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#> knitr::purl(input="illness-death.Rmd")
 
 
 
-# Overview
 
-Note that if you would like to extract the code directly from this document into an R script, the following command can be ran:
-
-```{r, eval=F, purl=FALSE}
-knitr::purl(input="illness-death.Rmd")
-```
-
-
-This vignette demonstrates how to simulate from and fit an illness-death model using the `MultistateModelsPaper` R package, 
-which is based on the `MultistateModels.jl` Julia package. 
-This version of the package is a stable version used to accompany the paper
-"Assessing treatment efficacy for interval censored endpoints using multistate semi-Markov models fit to multiple data streams".
-In this simple setting, patients are healthy at the start of follow-
-up. The model has three states – healthy, ill, and dead – and three transitions — healthy to ill,
-healthy to dead, and ill to dead. Disease recurrence is interval censored but the time
-of death is exactly observed.
-
-
-```{r, echo=FALSE, fig.cap="Direct transitions between states in a progressive illness-death model.", purl=F}
-knitr::include_graphics("illness_death.PNG")
-```
-
-
-In this example, clinical histories for 250 participants are simulated in a hypothetical study using a 
-progressive illness-death model with Weibull transition intensities with shape parameter greater than 1, so each
-intensity was 0 at the time of state entry and increased over time. Clinical data was accrued at
-baseline, which was the time of entry into the healthy state, and at random times spaced spaced
-roughly every 1 month over 1 year of follow-up. 
-
-# Installation and Setup
-
-First, ensure `Julia` (<span>&#8805;</span> version 1.10) is installed. Julia can be downloaded from https://julialang.org/downloads/. Julia must be added to the system PATH; instructions can be found here: https://julialang.org/downloads/platform/. After installing Julia, ensure that the `JuliaConnectoR` R package has been installed and loaded. This package depends on having R version <span>&#8805;</span> 3.2).
-
-```{r, class.source='fold-show'}
+## ----class.source='fold-show'----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #install.packages("JuliaConnectoR")
 library(JuliaConnectoR)
-```
 
-Once the `JuliaConnectoR` package is loaded, the following code can be run to ensure Julia is installed correctly:
 
-```{r, class.source='fold-show'}
-JuliaConnectoR::juliaSetupOk()
-```
-
-If `Julia` is properly installed, this will return `TRUE`. If `FALSE` is returned, it means that `Julia` has not been installed correctly. See the help page for the `JuliaConnectoR-package` for more details. 
-
-`dplyr`, `ggplot2`, `knitr`, and `kableExtra` are also required for this vignette:
-
-```{r, class.source='fold-show'}
+## ----class.source='fold-show'----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #install.packages("dplyr")
 #install.packages("ggplot2")
 #install.packages("knitr")
 #install.packages("kableExtra")
 library(ggplot2)
 library(dplyr)
-```
 
-The necessary Julia functions can be installed by running the following code:
 
-```{r, class.source='fold-show', warning=FALSE, message=F}
+## ----class.source='fold-show', warning=FALSE, message=F--------------------------------------------------------------------------------------------------------------------------------------------------------
 if (JuliaConnectoR::juliaSetupOk()){
     JuliaConnectoR::juliaEval('
        import Pkg
-       Pkg.add(url = "https://github.com/fintzij/MultistateModels.jl#biostatistics_manuscript_2024")
+       Pkg.add(url = "https://github.com/fintzij/MultistateModels.jl.git")
        Pkg.add("CSV")
        Pkg.add("DataFrames")
        Pkg.add("Random")')
@@ -95,33 +40,17 @@ if (JuliaConnectoR::juliaSetupOk()){
     stop("Julia setup incorrect.
          Ensure Julia version >= 1.10 is properly installed.")
   }
-```
 
 
-If there is an error, see the help page for the `JuliaConnectoR-package` for more details. 
-
-You can install MultistateModelsPaper from
-[GitHub](https://github.com/) with:
-
-```{r, class.source='fold-show', warning=FALSE, message=FALSE}
+## ----class.source='fold-show', warning=FALSE, message=FALSE----------------------------------------------------------------------------------------------------------------------------------------------------
 #install.packages("devtools")
 devtools::install_github("ammateja/MultistateModelsPaper", quiet=TRUE)
 library(MultistateModelsPaper)
-```
-
-# Illness death model
-
-
-The function `makepars` (click to show code) sets the Weibull baseline intensities for all three transitions. 
-The parameters are shown in the table below:
-
-```{r, echo=FALSE, fig.cap="Parameterization and parameter values for transition intensities in the simulation model.", purl=F}
-knitr::include_graphics("weibull.PNG")
-```
 
 
 
-```{r}
+
+## --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Function to make parameters
 makepars <- function() {
   parameters <- list(h12 = c(log(1.25), log(1.5)), 
@@ -129,17 +58,9 @@ makepars <- function() {
                      h23 = c(log(1.25), log(2)))
   return(parameters)
 }
-```
 
-The function `make_obstimes` (click to show code) creates visit times for each participant. 
-Participants are followed for one year and their clinical status is observed at
-monthly increments. We add some variation around the scheduled assessment
-time to better emulate a real-world study. The random visit times are drawn from a beta(1.5, 1.5)
-distribution centered around the scheduled time and scaled to span the midpoints between scheduled
-assessments, e.g., an individual’s visit time for month 2 would be drawn as 2 + (rbeta(1, 1.5, 1.5) - 0.5). 
-The time of enrollment and end of follow-up were 0 and 1 year for all participants.
 
-```{r}
+## --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Function to make the assessment times
 make_obstimes <- function(ntimes) {
   #observation times
@@ -152,14 +73,9 @@ make_obstimes <- function(ntimes) {
 
   return(times)
 }
-```
-
-First, we  create a dataset of N=250 subjects. 
-The dataset contains the observation times for each subject as described above. 
-For this initial dataset, both `statefrom` and `stateto` are equal to 1, and `obstype` is equal to 2 (panel data). 
 
 
-```{r}
+## --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Initialize empty data frame and loop through each subject
 set.seed(1)
 data <- NULL
@@ -179,12 +95,9 @@ for (i in 1:250) {
   d <- data.frame(id=id, tstart=tstart, tstop=tstop, statefrom=statefrom, stateto=stateto, obstype=obstype)
   data <- rbind(data, d)
 }
-```
 
-Once this initial dataset is established, a multistate model is initialized for simulation and the Weibull transition intensities are 
-set to the starting values as described in `makepars` above.  
 
-```{r}
+## --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #set all hazards to be Weibull
 h12 <- MultistateModelsPaper::Hazard(formula = 0~1, statefrom = 1, stateto=2, family="wei")
 h13 <- MultistateModelsPaper::Hazard(formula = 0~1, statefrom = 1, stateto=3, family="wei")
@@ -196,32 +109,16 @@ model <- MultistateModelsPaper::multistatemodel(hazard = c(h12, h13, h23), data=
 parameters <- makepars()
 #Set parameters
 model_sim <- MultistateModelsPaper::set_parameters(model=model, newvalues=parameters)
-```
 
-Using that dataset, we simulate sample paths for each subject.
 
-```{r}
+## --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 JuliaConnectoR::juliaEval("using Random")
 JuliaConnectoR::juliaEval("Random.seed!(0)")
 #Simulate one sample path per subject
 paths <- MultistateModelsPaper::simulate(model=model_sim, nsim=1, paths=TRUE, data=FALSE)
-```
 
 
-In `observe_subjdat` (click to show), we combine the observed visit times for each subject with
-their simulated sample paths. For a transition between illness and death, we insert a ghost transition 
-with time &epsilon; for model fitting. The transition between healthy and illness (state 1 to state 2) is a panel observation, 
-and so for these transitions, obstype = 2 as the time of that transition is unknown.
-The transition between illness and death (state 2 to state 3) happens in the interval (time of death – epsilon, time of death] and obstype = 1, 
-as the transition is known to have occurred at the time of death exactly. 
-
-
-We update the states to reflect the transitions between
-the simulated paths, and cull redundant rows in the absorbing state (death).
-`obstype` is set to 2 except for the transition is between states 2 and 3, which is directly observed and so
-`obstype` is set to 1. 
-
-```{r}
+## --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 observe_subjdat <- function(path, model) {
   
   #Get data used in model and loop through each subject
@@ -269,46 +166,17 @@ observe_subjdat <- function(path, model) {
   return(subjdat)
   
 }
-```
 
-```{r}
+
+## --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 dat <- observe_subjdat(paths, model_sim)
-```
-
-The setup of this dataset is shown below: 
-
-
-```{r, echo=FALSE, purl=F}
-knitr::kable(dat, "html") %>% kableExtra::kable_styling() %>% kableExtra::scroll_box(width = "800px", height = "300px")
-```
-
-
-We can now re-create the model with the simulated data, according to one of the four parameterizations specified below. 
-In this example, we use linear splines. 
-
-
-```{r, echo=FALSE, fig.cap="Parameterization of transition intensities for illness-death models.", purl=F}
-knitr::include_graphics("parameterizations.PNG")
-```
-
-For each model, all transition intensities were assigned the same functional form. 
-Two of the models were semi-parametric and used B-splines to approximate the baseline intensity for each transition. 
-In the simple case, we used degree 1 B-splines, i.e., linear splines, with a single interior knot set at the
-median observed transition time for each possible event. In the more complicated case, we used
-natural cubic splines with interior knots at the 1/3 and 2/3 quantiles of the transition times for
-each event. For the transition from ill to dead, we computed the quantiles for time from
-recurrence to death by taking the left endpoint of the interval in which disease was known to have
-recurred as the time of illness onset. In both spline models, the right boundary knot was set to the
-greatest observed transition time, or the maximum of the right endpoints of the intervals in which
-recurrence was known to have occurred in the case of the healthy to ill transition. We used a flat
-extrapolation of the transition intensity beyond the right spline boundary.
-
-We initialize parameters to set the starting values of the transition intensities to MLEs of the Markov model
-and fit the model, which is now setup for inference. 
 
 
 
-```{r}
+
+
+
+## --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #Obtain knots for each transition
 #median observed transition time for each possible event
 knots12 <- c(0, quantile(JuliaConnectoR::juliaLet("MultistateModels.extract_sojourns(1, 2, MultistateModels.extract_paths(dat))", dat=JuliaConnectoR::juliaCall("DataFrame", dat)), c(0.5, 1)))
@@ -326,12 +194,9 @@ model_fit <- MultistateModelsPaper::multistatemodel(hazard = c(h12_sp, h13_sp, h
 model_fit <- MultistateModelsPaper::initialize_parameters(model = model_fit)
 #Fi the model
 model_fitted <- MultistateModelsPaper::fit(model = model_fit, verbose=TRUE, compute_vcov = TRUE, ess_target_initial = 50, ascent_threshold = 0.2, stopping_threshold = 0.2, tol = 0.001)
-```
-
-In order to obtain the maximum likelihood estimates for functionals of interest, we simulate 20 paths per subject from this fitted model.
 
 
-```{r}
+## --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 JuliaConnectoR::juliaEval("Random.seed!(0)")
 #Set up model for simulation with data from fitted model
 model_sim2 <- MultistateModelsPaper::multistatemodel(hazard = c(h12_sp, h13_sp, h23_sp), data=as.data.frame(model_sim$data))
@@ -341,15 +206,9 @@ model_sim2 <- MultistateModelsPaper::set_parameters(model = model_sim2, newvalue
 
 #Simulate 20 paths per subject
 paths_sim <- MultistateModelsPaper::simulate(model = model_sim2, nsim = 20, paths = TRUE, data = FALSE)
-```
-
-In this single example, we show prevalence in each compartment, and cumulative incidence of illness and death. 
-Confidence intervals are obtained by summarizing sample paths simulated from the asymptotic distribution of the MLEs. 
 
 
-
-
-```{r, echo=F}
+## ----echo=F----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 times <- seq(0, 1, 0.05)
 times_new <- seq(0, 1, 0.01)
 
@@ -360,11 +219,9 @@ times_summary <- intervals %>% dplyr::group_by(times, V4) %>% dplyr::summarize(n
 intervals_mod <- dplyr::bind_rows(lapply(paths_sim, function(x){as.data.frame(cbind(times_new, rep(x$subj, length(times_new)), findInterval(times_new, x$times), x$states[findInterval(times_new, x$times)]))}))
 
 times_summary_mod <- intervals_mod %>% dplyr::group_by(times_new, factor(V4), .drop=FALSE) %>% dplyr::summarize(n=n(), per=100*(n/length(paths_sim)), .groups="drop")
-```
 
 
-
-```{r, echo=F}
+## ----echo=F----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 inc2 <- rep(1, length(paths))
 inc3 <- rep(1, length(paths))
 
@@ -424,9 +281,9 @@ for (i in 1:length(times_new)) {
 
 incidence_mod <- data.frame(times = rep(times_new, 2), incidence = c(times2_mod, times3_mod), state = c(rep(2, length(times_new)), rep(3, length(times_new))))
 
-```
 
-```{r, echo=F}
+
+## ----echo=F----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 asymptotic_bootstrap_incidence <- function(model, pars, vcov, sims_per_subj, nboot) {
   
   npars <- length(pars)
@@ -505,23 +362,17 @@ asymptotic_bootstrap_incidence <- function(model, pars, vcov, sims_per_subj, nbo
   
   
 }
-```
 
-```{r, echo=F}
+
+## ----echo=F----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #JuliaConnectoR::juliaEval("Random.seed!(0)")
 #set.seed(1)
 #inc_cis <- asymptotic_bootstrap_incidence(model_sim2, JuliaConnectoR::juliaGet(model_fitted$parameters)$data, model_fitted$vcov, 20, 1000)
 
 inc_cis <- readRDS("cis.RDS")
-```
-
-The plot below shows the prevalence in each compartment. 
-Dots are from paths of the initial simulated data. Solid lines correspond to the pointwise 
-maximum likelihood estimates and the shaded areas to the 95% pointwise confidence band based on 1,000 bootstrap samples.
 
 
-
-```{r, fig.height=6, fig.width=8, echo=F}
+## ----fig.height=6, fig.width=8, echo=F-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ggplot() + 
   geom_point(data=times_summary, aes(x=times, y=per, col=factor(V4))) + 
   geom_line(data=times_summary_mod, aes(x=times_new, y=per, col=`factor(V4)`), lwd=1) + 
@@ -533,16 +384,9 @@ ggplot() +
   labs(y = "Prevalence (%)", x = "Time", col = "State") +
   scale_x_continuous(breaks = seq(0, 1, 0.1)) +
   scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 25))
-```
 
 
-
-
-The plot below shows the cumulative incidence of illness and death. 
-Dos are from paths of the initial simulated data. Solid lines correspond to the pointwise 
-maximum likelihood estimates and the shaded areas to the 95% pointwise confidence band based on 1,000 bootstrap samples.
-
-```{r, fig.height=6, fig.width=8, echo=F}
+## ----fig.height=6, fig.width=8, echo=F-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ggplot() + 
   geom_point(data=incidence, aes(x=times, y=incidence, col=factor(state))) + 
   geom_line(data=incidence_mod, aes(x=times, y=incidence, col=factor(state)), lwd=1) +
@@ -553,7 +397,4 @@ ggplot() +
   labs(y = "Cumulative Incidence (%)", x = "Time", col = "State") +
   scale_x_continuous(breaks = seq(0, 1, 0.1)) +
   scale_y_continuous(limits = c(0, 100), breaks = seq(0, 100, 25))
-```
-
-
 
