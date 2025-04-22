@@ -1,0 +1,768 @@
+---
+title: "Fitting a 5-state multistate model using MultistateModels.jl"
+author: "Allyson Mateja, Rapha&euml;l Morsomme, C. Jason Liang, Dean A. Follmann, Meagan P. O'Brien, Chenguang Wang, Jonathan Fintzi"
+date: "`r Sys.Date()`"
+output: 
+  rmarkdown::html_vignette:
+    code_folding: hide
+vignette: >
+  %\VignetteIndexEntry{Fitting a 5-state multistate model using MultistateModels.jl}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  warning=FALSE, 
+  message=FALSE,
+  comment = "#>"
+)
+set.seed(1)
+```
+
+# Overview
+
+This vignette demonstrates how to simulate data with a similar structure to the Regeneron data used as a motivating example in the paper "Assessing treatment efficacy for interval censored endpoints using multistate semi-Markov models fit to multiple data streams". This simulation uses R code to connect to the `MultistateModels.jl` Julia package. 
+
+The analysis of the REGEN-2069 trial data aims to characterize the effect of mAb on infection and seroconversion, and to quantify the duration of PCR positivity. Inference is based on the model, shown below, which has a na&iuml;ve uninfected state, and four post-infection states characterized by symptom history and whether SARS-CoV-2 infection is, or has ceased to be, detectable by PCR. 
+
+
+```{r, echo=FALSE, fig.cap="Model for infection, symptoms, and seroconversion. Solid arrows represent transitions. Dash-dotted lines depict final serology status.", purl=F}
+knitr::include_graphics("REGEN.PNG")
+```
+
+The data consist of symptom onset times, seroconversion at
+four weeks, and PCR measurements roughly every week throughout the efficacy assessment period
+(EAP), with some variation in the visit times to emulate a realistic trial.
+
+Trials were simulated from a more complicated semi-Markov model with nine states - a na&iuml;ve uninfected state, and eight post-infection states characterized by symptom history, PCR positivity, and seroconversion. 
+
+```{r, echo=FALSE, fig.cap="Direct transitions between states in the model for clinical and immunological progression from which participant histories were simulated.", purl=F}
+knitr::include_graphics("full_model.PNG")
+```
+
+The transitions from na&iuml;ve to PCR+ without symptoms and from PCR+ without symptoms
+to diseased were assigned Weibull transition intensities, while the remainder of the transitions
+had exponential intensities. We set the simulation parameters so that subjects receiving mAb
+have lower rates of infection and seroconversion along with shorter durations of PCR positivity.
+
+```{r, echo=FALSE, fig.cap="Parameterization and parameter values for transition intensities in the simulation model.", purl=F}
+knitr::include_graphics("full_model_params.PNG")
+```
+
+In this example, clinical histories for 1600 participants (800 per arm) are simulated in a hypothetical study to mimic data from the REGEN-2069 trial. 
+
+Clinical data was accrued at baseline and 3 subsequent visits. 
+
+# Installation and Setup
+
+First, ensure `Julia` (<span>&#8805;</span> version 1.10) is installed. Julia can be downloaded from https://julialang.org/downloads/. Julia must be added to the system PATH; instructions can be found here: https://julialang.org/downloads/platform/. After installing Julia, ensure that the `JuliaConnectoR` R package has been installed and loaded. This package depends on having R version <span>&#8805;</span> 3.2).
+
+```{r, class.source='fold-show', warning=FALSE, message=F}
+#install.packages("JuliaConnectoR")
+library(JuliaConnectoR)
+```
+
+Once the `JuliaConnectoR` package is loaded, the following code can be run to ensure Julia is installed correctly:
+
+```{r, class.source='fold-show'}
+JuliaConnectoR::juliaSetupOk()
+```
+
+If `Julia` is properly installed, this will return `TRUE`. If `FALSE` is returned, it means that `Julia` has not been installed correctly. See the help page for the `JuliaConnectoR-package` for more details. 
+
+`dplyr`, `ggplot2`, `knitr`, and `kableExtra` are also required for this vignette:
+
+```{r, class.source='fold-show', warning=FALSE, message=F}
+#install.packages("dplyr")
+#install.packages("ggplot2")
+#install.packages("knitr")
+#install.packages("kableExtra")
+library(ggplot2)
+library(dplyr)
+```
+
+The necessary Julia functions can be installed by running the following code:
+
+```{r, class.source='fold-show', warning=FALSE, message=F}
+if (JuliaConnectoR::juliaSetupOk()){
+    JuliaConnectoR::juliaEval('
+       import Pkg
+       Pkg.add(url = "https://github.com/fintzij/MultistateModels.jl#biostatistics_manuscript_2024")
+       Pkg.add("CSV")
+       Pkg.add("DataFrames")
+       Pkg.add("Random")
+       Pkg.add("Chain")
+       Pkg.add("Distributions")
+       Pkg.add("DataFramesMeta")')
+  } else {
+    stop("Julia setup incorrect.
+         Ensure Julia version >= 1.10 is properly installed.")
+  }
+```
+
+
+If there is an error, see the help page for the `JuliaConnectoR-package` for more details. 
+
+# Model
+
+First, we ensure that the necessary Julia packages are loaded. 
+
+Then, we set up the function `makepars` in Julia to set the baseline intensities for each transition, depending on the model number. Model numbers 1 and 2 are for the full 9-state model, while model numbers 3 and 4 are for the collapsed 5-state model, as used for the Regeneron data. 
+
+```{r, class.source='fold-show', warning=FALSE, message=F}
+JuliaConnectoR::juliaEval("using Chain
+                          using DataFrames
+                          using DataFramesMeta
+                          using Random
+                          using Distributions
+                          using MultistateModels
+                          ")
+```
+
+
+```{r, warning=FALSE, message=FALSE}
+invisible(JuliaConnectoR::juliaEval("# function to make the parameters
+function makepars(; model_number = 1, nulleff = 1)
+    te = 2 - nulleff == 1
+
+    if model_number <= 2
+        parameters = (h12 = [log(0.7), log(0.6), log(0.33) * te],
+                      h23 = [log(0.2), log(0.5) * te],
+                      h24 = [log(0.5), log(1.4) * te],
+                      h35 = [log(0.5), log(1.4) * te],
+                      h45 = [log(0.3), log(0.5) * te],
+                      h26 = [log(1.5), log(1), log(0.4) * te],
+                      h67 = [log(1), log(0.5) * te],
+                      h68 = [log(0.3), log(1.4) * te],
+                      h79 = [log(0.3), log(1.4) * te],
+                      h89 = [log(1), log(0.5) * te])
+    else
+        parameters = (h12 = [log(0.7), log(0.6), log(0.33) * te],
+                      h23 = [log(0.5), log(1.4) * te],
+                      h24 = [log(1.5), log(1), log(0.5) * te],
+                      h45 = [log(0.3), log(1.4) * te])
+    end
+    return parameters
+end"))
+```
+
+The Julia function below will simulate the PCR assessment times. 
+
+```{r, warning=FALSE, message=F}
+invisible(JuliaConnectoR::juliaEval("# function to make the PCR assessment times
+function makepcrs(;ntimes=4)
+
+    if ntimes == 4
+        times = [0.0; [1.0, 2.0, 3.0] .+ (rand(Beta(3, 3), 3) .- 0.5) .* 0.5; 4.0]
+    elseif ntimes == 1
+        times = [0.0, 4.0]
+    end
+    
+    return times
+end"))
+```
+
+We start with the full 9-state model; a dataset is created using simulated PCR assessment times based on the `makepcrs` function above, a multistate model is initialized for simulation, and the transition intensities are set to the starting values as described in `makepars`.  
+
+Sample paths are then simulated for each subject.
+
+```{r, warning=FALSE, message=F}
+invisible(JuliaConnectoR::juliaEval('# function to set up the model
+function setup_full_model(; make_pars, data = nothing, ntimes = 4, nulleff = 1, SamplingWeights = nothing, n_per_arm = 800)
+    
+    # create hazards
+    h12 = Hazard(@formula(0 ~ 1 + mab), "wei", 1, 2)
+    h23 = Hazard(@formula(0 ~ 1 + mab), "exp", 2, 3)
+    h24 = Hazard(@formula(0 ~ 1 + mab), "exp", 2, 4)
+    h35 = Hazard(@formula(0 ~ 1 + mab), "exp", 3, 5)
+    h45 = Hazard(@formula(0 ~ 1 + mab), "exp", 4, 5)
+    h26 = Hazard(@formula(0 ~ 1 + mab), "wei", 2, 6)
+    h67 = Hazard(@formula(0 ~ 1 + mab), "exp", 6, 7)
+    h68 = Hazard(@formula(0 ~ 1 + mab), "exp", 6, 8)
+    h79 = Hazard(@formula(0 ~ 1 + mab), "exp", 7, 9)
+    h89 = Hazard(@formula(0 ~ 1 + mab), "exp", 8, 9)
+
+    # data for simulation parameters
+    if isnothing(data)
+        visitdays = [makepcrs(;ntimes = ntimes) for i in 1:(2*n_per_arm)]
+        data = DataFrame(id = repeat(collect(1:(2 * n_per_arm )), inner = ntimes),
+                    tstart = reduce(vcat, map(x -> x[Not(end)], visitdays)),
+                    tstop = reduce(vcat, map(x -> x[Not(1)], visitdays)),
+                    statefrom = fill(1, 2 * n_per_arm * ntimes),
+                    stateto = fill(1, 2 * n_per_arm * ntimes),
+                    obstype = fill(1, 2 * n_per_arm * ntimes),
+                    mab = repeat([0.0, 1.0], inner = n_per_arm * ntimes),
+                    covid = 0.0,
+                    sero  = 0.0)
+    end
+
+    if isnothing(SamplingWeights)
+        SamplingWeights = ones(Float64, length(unique(data.id)))
+    end
+
+    # create model
+    model = multistatemodel(h12, h23, h24, h35, h45, h26, h67, h68, h79, h89; data = data, SamplingWeights = SamplingWeights)
+
+    # set parameters
+    if make_pars
+        parameters = makepars(; model_number = 1, nulleff = nulleff)
+        set_parameters!(model, parameters) 
+    end
+
+    # return model
+    return model
+end'))
+
+invisible(JuliaConnectoR::juliaEval("Random.seed!(123)"))
+invisible(JuliaConnectoR::juliaEval("model_full_sim = setup_full_model(; make_pars = true, data = nothing, nulleff = 1, n_per_arm = 800)"))
+
+invisible(JuliaConnectoR::juliaEval("paths = simulate(model_full_sim; nsim = 1, paths = true, data = false)[:,1]"))
+```
+
+Functions below collapse the full 9-state model into the smaller 5-state model. In `observe_subjdat`, we combine the observed visit times for each subject with their simulated sample paths. 
+
+```{r, warning=FALSE, message=F}
+invisible(JuliaConnectoR::juliaEval('# function to set up the model
+function setup_collapsed_model(; make_pars, data, model_number, ntimes = 4, nulleff = 1, SamplingWeights = nothing)
+    
+    # create hazards
+    if model_number == 3
+        h12 = Hazard(@formula(0 ~ 1 + mab), "wei", 1, 2)
+        h23 = Hazard(@formula(0 ~ 1 + mab), "exp", 2, 3)
+        h24 = Hazard(@formula(0 ~ 1 + mab), "wei", 2, 4)
+        h45 = Hazard(@formula(0 ~ 1 + mab), "exp", 4, 5)
+    elseif model_number == 4
+        h12 = Hazard(@formula(0 ~ 1 + mab), "sp", 1, 2, degree = 1, knots = 5/7, boundaryknots = [0.0, 4.0])
+        h23 = Hazard(@formula(0 ~ 1 + mab), "sp", 2, 3, degree = 1, knots = 1.0, boundaryknots = [0.0, 4.0])
+        h24 = Hazard(@formula(0 ~ 1 + mab), "sp", 2, 4, degree = 1, knots = 1.0, boundaryknots = [0.0, 4.0])
+        h45 = Hazard(@formula(0 ~ 1 + mab), "sp", 4, 5, degree = 1, knots = 1.0, boundaryknots = [0.0, 4.0])        
+    end
+
+    if isnothing(SamplingWeights)
+        SamplingWeights = ones(Float64, length(unique(data.id)))
+    end
+    
+    # censoring patterns
+    censoring_patterns = [3 1 0 1 0 0]
+    
+    # create model
+    model = multistatemodel(h12, h23, h24, h45; data = data, SamplingWeights = SamplingWeights, CensoringPatterns = censoring_patterns)
+
+    # set parameters
+    if make_pars
+        parameters = makepars(; model_number = 3, nulleff = nulleff)
+        set_parameters!(model, parameters) 
+    end
+
+    # return model
+    return model
+end'))
+
+invisible(JuliaConnectoR::juliaEval('# function to collapse path from 9 states to 5
+function collapse_path(path_full)
+    times  = path_full.times
+    states = path_full.states
+
+    # recode
+    states[findall(states .== 1)]         .= -1
+    states[findall(states .∈ Ref([2,3]))] .= -2
+    states[findall(states .∈ Ref([4,5]))] .= -3
+    states[findall(states .∈ Ref([6,7]))] .= -4
+    states[findall(states .∈ Ref([8,9]))] .= -5
+
+    states .*= -1
+
+    # indices
+    inds = [0; findall(states[Not(1)] .!= states[Not(end)])] .+ 1
+
+    # tack on last state and time if not absorbing
+    if (last(states, 2) == [1,1]) | (last(states, 2) == [2,2]) | (last(states, 2) == [4,4])
+        push!(inds, length(states))
+    end
+
+    # remove duplicates
+    states = states[inds]
+    times  = times[inds]
+
+    return MultistateModels.SamplePath(path_full.subj, times, states)
+end'))
+
+invisible(JuliaConnectoR::juliaEval("# function to wrangle a path to subject data
+function observe_subjdat_full(path, model)
+    # grab subject's data
+    i = path.subj
+    subj_dat_raw = model.data[model.subjectindices[i], :]
+
+    # make dataset
+    ntimes  = length(path.times) - 1 
+    subjdat = DataFrame(
+        id = fill(path.subj, ntimes),
+        tstart = path.times[Not(end)],
+        tstop = path.times[Not(1)],
+        statefrom = path.states[Not(end)],
+        stateto = path.states[Not(1)],
+        obstype = fill(1, ntimes),
+        mab = fill(subj_dat_raw.mab[1], ntimes))
+    
+    # tack on PCR, symptoms, sero
+    subjdat[:,:pcrpos] = ifelse.(subjdat.stateto .∈ Ref([2,3,6,7]), 1, 0)
+    subjdat[:,:covid] = ifelse.(subjdat.stateto .> 5, 1, 0)
+    subjdat[:,:sero] = ifelse.(subjdat.stateto .∈ Ref([3,5,7,9]), 1, 0)
+
+    # cull out redundant observations in absorbing states
+    subjdat = subjdat[Not(((subjdat.stateto .== 5) .& (subjdat.statefrom .== 5)) .| ((subjdat.stateto .== 9) .& (subjdat.statefrom .== 9))), :]
+
+    # exit
+    return subjdat
+end
+
+function observe_subjdat_panel(path, model)
+
+    # grab subject's data
+    i = path.subj
+    subj_dat_raw = model.data[model.subjectindices[i], :]
+
+    # sequences of times and states
+    obstimes = unique(sort([0.0; subj_dat_raw.tstop; path.times[findall(path.states .== 6)]]))
+    obsinds  = searchsortedlast.(Ref(path.times), obstimes)
+    obsstates = path.states[obsinds]
+
+    # if there is a 1->6 observation insert a ghost times
+    if any((obsstates[Not(end)] .== 1) .& (obsstates[Not(1)] .== 6))
+        # insert time and state
+        push!(obstimes, path.times[findfirst(path.states .== 6)] - sqrt(eps()))
+        push!(obsstates, 2)
+
+        # reorder
+        ord = sortperm(obstimes)
+        obstimes = obstimes[ord]
+        obsstates = obsstates[ord]
+
+        # make sure there is no delta less than sqrt(eps())
+        if any(diff(obstimes) .< sqrt(eps()))
+            obstimes .+= collect(0:(length(obstimes)-1)) * sqrt(eps())
+        end
+    end
+    
+    # make data
+    ntimes  = length(obstimes) - 1 
+    subjdat = DataFrame(
+        id = fill(path.subj, ntimes),
+        tstart = obstimes[Not(end)],
+        tstop = obstimes[Not(1)],
+        statefrom = obsstates[Not(end)],
+        stateto = obsstates[Not(1)],
+        obstype = fill(2, ntimes),
+        mab = fill(subj_dat_raw.mab[1], ntimes))
+
+    # tack on PCR, symptoms, sero
+    subjdat[:,:pcr] = ifelse.(subjdat.stateto .∈ Ref([2,3,6,7]), 1, 0)
+    subjdat[:,:covid] = ifelse.(subjdat.stateto .> 5, 1, 0)
+    subjdat[:,:sero] = ifelse.(subjdat.stateto .∈ Ref([3,5,7,9]), 1, 0)
+
+    # correct obstype
+    if any(subjdat.stateto .== 6)
+        subjdat.obstype[findfirst(subjdat.stateto .== 6)] = 1
+    end
+
+    # cull out redundant observations in absorbing states
+    subjdat = subjdat[Not(((subjdat.stateto .== 5) .& (subjdat.statefrom .== 5)) .| ((subjdat.stateto .== 9) .& (subjdat.statefrom .== 9))), :]
+
+    # exit
+    return subjdat
+end
+
+function observe_subjdat_collapsed(path, model)
+
+    # grab subject's data
+    i = path.subj
+    subj_dat_raw = model.data[model.subjectindices[i], :]
+
+    # get serology 
+    sero = any(path.states .∈ Ref([3,5,7,9]))
+
+    # collapse path
+    path = collapse_path(deepcopy(path))
+
+    # sequences of times and states
+    obstimes = unique(sort([0.0; subj_dat_raw.tstop; path.times[findall(path.states .== 4)]]))
+    obsinds  = searchsortedlast.(Ref(path.times), obstimes)
+    obsstates = path.states[obsinds]
+
+    # if there is a 1->6 observation insert a ghost times
+    if any((obsstates[Not(end)] .== 1) .& (obsstates[Not(1)] .== 4))
+        # insert time and state
+        push!(obstimes, path.times[findfirst(path.states .== 4)] - sqrt(eps()))
+        push!(obsstates, 2)
+
+        # reorder
+        ord = sortperm(obstimes)
+        obstimes = obstimes[ord]
+        obsstates = obsstates[ord]
+
+        # make sure there is no delta less than sqrt(eps())
+        if any(diff(obstimes) .< sqrt(eps()))
+            obstimes .+= collect(0:(length(obstimes)-1)) * sqrt(eps())
+        end
+    end
+    
+    # make data
+    ntimes  = length(obstimes) - 1 
+    subjdat = DataFrame(
+        id = fill(path.subj, ntimes),
+        tstart = obstimes[Not(end)],
+        tstop = obstimes[Not(1)],
+        statefrom = obsstates[Not(end)],
+        stateto = obsstates[Not(1)],
+        obstype = fill(2, ntimes),
+        mab = fill(subj_dat_raw.mab[1], ntimes))
+
+    # tack on PCR, symptoms, sero
+    subjdat[:,:pcr]   = ifelse.(subjdat.stateto .∈ Ref([2,4]), 1, 0)
+    subjdat[:,:covid] = ifelse.(subjdat.stateto .> 3, 1, 0)
+    subjdat[:,:sero] .= sero
+    
+    # correct obstype
+    if any(subjdat.stateto .== 4)
+        subjdat.obstype[findfirst(subjdat.stateto .== 4)] = 1
+    elseif sero & !any(subjdat.covid .== 1) & !any(subjdat.pcr .== 1)
+        subjdat.stateto[Not(end)] .= 0
+        subjdat.stateto[end]       = 3
+        subjdat.statefrom[Not(1)] .= 0
+        subjdat.obstype[Not(end)] .= 3
+    end
+    
+    # cull out redundant observations in absorbing states
+    subjdat = subjdat[Not(((subjdat.stateto .== 3) .& (subjdat.statefrom .== 3)) .| ((subjdat.stateto .== 5) .& (subjdat.statefrom .== 5))), :] 
+
+    # exit
+    return subjdat
+end
+
+# wrapper
+function observe_subjdat(path, model, model_number)
+    if model_number == 1
+        subjdat = observe_subjdat_full(path, model)
+    elseif model_number == 2
+        subjdat = observe_subjdat_panel(path, model)
+    else
+        subjdat = observe_subjdat_collapsed(path, model)
+    end
+    return subjdat
+end"))
+```
+
+The setup of this dataset is shown below (only the first 30 rows are displayed) for the collapse model using Weibull and exponential transition intensities (model number 3): 
+
+```{r, warning=FALSE, message=F}
+dat <- JuliaConnectoR::juliaEval("dat = reduce(vcat, map(x -> observe_subjdat(x, model_full_sim, 3), paths))")
+
+df <- as.data.frame(JuliaConnectoR::juliaEval("dat"))
+```
+
+```{r, echo=FALSE, purl=F}
+knitr::kable(head(df, n=30), "html") %>% kableExtra::kable_styling() %>% kableExtra::scroll_box(width = "800px", height = "300px")
+```
+
+
+
+We can now re-create the collapsed model with the simulated data. We initialize parameters to set the starting values of the transition intensities to MLEs of the Markov model and fit the model, which is now setup for inference. 
+
+
+```{r, warning=FALSE, message=F}
+invisible(JuliaConnectoR::juliaEval("Random.seed!(0)"))
+invisible(JuliaConnectoR::juliaEval("sims_per_subj = 100"))
+invisible(JuliaConnectoR::juliaEval("# initialize bookkeeping for weights
+            subjweights = @chain dat begin
+                groupby(:id)
+                @combine(:mab = first(:mab),
+                        :sero = first(:sero),
+                        :weight = 1.0)
+            end"))
+```
+
+
+```{r, warning=FALSE, message=F}
+invisible(JuliaConnectoR::juliaEval("# wrapper to fit the collapsed model to npos or nneg
+function fit_collapsed(dat; model_number, SamplingWeights = nothing)
+
+    # fit to npos and nneg
+    model_fit = setup_collapsed_model(; make_pars = false, data = dat, SamplingWeights = SamplingWeights, model_number = model_number)
+
+    # initialize model parameters
+    initialize_parameters!(model_fit; crude = true)
+    initialize_parameters!(model_fit)
+
+    # fit models
+    model_fitted = fit(model_fit; verbose = true, compute_vcov = false, ess_target_initial = 50, ascent_threshold = 0.2, stopping_threshold = 0.2, tol = 0.01)
+
+    return model_fitted
+end"))
+
+invisible(JuliaConnectoR::juliaEval("model_fitted = fit_collapsed(dat; model_number = 3, SamplingWeights = subjweights.weight)"))
+```
+
+
+In order to obtain the maximum likelihood estimates for functionals of interest, we simulate 100 paths per subject from this fitted model, without bootstraping (indicated by setting seed2 equal to 0). 
+
+
+```{r, warning=FALSE, message=F}
+invisible(JuliaConnectoR::juliaEval("# remake dataset for prediction
+function make_dat4pred(dat; obstype=2) 
+    data = @chain dat begin
+        groupby(:id)
+        @combine(:tstart = 0.0,
+                 :tstop = 4.0,
+                 :statefrom = 1,
+                 :stateto = 1,
+                 :obstype = obstype,
+                 :mab = first(:mab), 
+                 :covid = maximum(:covid),
+                 :sero = first(:sero))
+    end
+end"))
+
+invisible(JuliaConnectoR::juliaEval("# to determine if ever PCR+
+function pcrdetec(path; full = true)
+    
+    # code events 
+    covid = full ? 6 : 4
+    pcrpos = full ? [2,3,6,7] : [2,4]
+    
+    # identify the states at the observation times
+    obsstates = path.states[searchsortedlast.(Ref(path.times), collect(0.0:4.0))]
+    
+    # return 0 or 1 if detected
+    detected = any(obsstates .∈ Ref(pcrpos)) 
+
+    return detected
+end"))
+
+invisible(JuliaConnectoR::juliaEval("# to calculate the probability of detection
+function pcr_detectprob(paths, full)
+
+    # find infected
+    infected = map(x -> x.states[2] > 1, paths)
+
+    # observe subjdat
+    detected = pcrdetec.(paths; full = full)
+
+    # probability of detection given infection
+    probdetec = map((x,y) -> sum(y) == 0 ? missing : sum(x[findall(y .== 1)]) / sum(y), eachrow(detected), eachrow(infected))
+
+    return probdetec
+end"))
+
+
+invisible(JuliaConnectoR::juliaEval("# to determine if an infection is detected
+function pcrdur_collapsed(paths_pred)
+
+    # identify paths with infections
+    infected = map(x -> x.states[2] > 1, paths_pred)
+
+    # get durations
+    pcrstart = map(x -> x.states[2] > 1 ? x.times[2] : 0.0, paths_pred)
+
+    pcrstop = map(x -> 
+        x.states[2] == 1 ? 0.0 : 
+        last(x.states) ∈ [2,4] ? last(x.times) : 
+        x.times[findfirst(x.states .∈ Ref([3,5]))], paths_pred)
+
+    pcrdur = pcrstop .- pcrstart
+
+    # compute the average duration among the infected
+    durs = map((x,y) -> any(y) ? mean(x[y]) : missing, eachrow(pcrdur), eachrow(infected))
+
+    return durs
+end"))
+
+invisible(JuliaConnectoR::juliaEval('# summarize paths
+function summarize_paths_collapsed(paths_pred, model_pred; return_counts = false)
+
+    # initialize data
+    dat = deepcopy(model_pred.data)
+
+    # summarize stateto-statefrom data at the individual level
+    gdat = groupby(dat, :id)
+    dat = combine(gdat,
+        :covid => (x -> any(x.==1)) => :covid,
+        :sero => (x -> any(x.==1)) => :sero,
+        :mab => (x -> any(x.==1)) => :mab
+    )
+
+    # matrices with events
+    infected = [any(x.states .> 1) for x in paths_pred]
+    symptomatic = [any(x.states .> 3) for x in paths_pred]
+    asymptomatic = infected .- symptomatic
+    infectime = [any(x.states .> 1) ? x.times[findfirst(x.states .> 1)] : 4.0 for x in paths_pred]
+
+    # observed in the data - not derived from simulated paths
+    dat[:,:serosympt]  = dat[:,:sero] .* dat[:,:covid]
+    dat[:,:seroasympt] = dat[:,:sero] .- dat[:,:serosympt]
+
+    # tabulate for npos
+    dat[:,:weight]       = model_pred.SamplingWeights
+    dat[:,:infected]    .= mean(infected, dims = 2)
+    dat[:,:symptomatic] .= mean(symptomatic, dims = 2)
+    dat[:,:asymptomatic] = dat.infected .- dat.symptomatic
+    dat[:,:infectime]   .= mean(infectime, dims = 2)
+
+    # get probability of detection|infection and pcr+ duration
+    dat[:,:pcrdur] = pcrdur_collapsed(paths_pred)
+    dat[:,:pcrdetect] = pcr_detectprob(paths_pred, false)
+
+     # summarize by mab
+    counts = @chain dat begin
+        groupby(:mab)
+        @combine(:N = sum(:weight),
+                # model estimates 
+                 :i = sum(:infected),
+                 :s = sum(:symptomatic),
+                 :a = sum(:asymptomatic),
+                 # from data
+                 :sero = sum(:sero .* :weight),
+                 :serosym = sum(:serosympt .* :weight),
+                 :seroasym = sum(:seroasympt .* :weight),
+                 # model estimates
+                 :rmt_i = mean(:infectime),
+                 :pcrdur = mean(:pcrdur[.!ismissing.(:pcrdur)]),
+                 :pcrdetect = mean(:pcrdetect[.!ismissing.(:pcrdetect)]))
+    end
+
+    # collect estimates
+    ests_wide = @chain counts begin
+        groupby(:mab)
+        @combine(:i = :i ./ :N,
+                 :s = :s ./ :N,
+                 :a = :a ./ :N,
+                 :s_i = :s ./ :i,
+                 :a_i = :a ./ :i,
+                 :n_i = :sero ./ :i,
+                 :n_s = :serosym ./ :s,
+                 :n_a = :seroasym ./ :a,
+                 :rmti = :rmt_i,
+                 :pcrdur = :pcrdur,
+                 :pcrdetect = :pcrdetect)
+    end
+
+    # stack the estimates
+    ests = @chain ests_wide begin
+        stack(Not(:mab))
+        @transform(@byrow :var = :variable * (:mab == 1.0 ? "_m" : "_p"))
+        @select($(Not(:mab, :variable)))
+        @select(:var, :value)
+    end 
+
+    # add in contrasts
+    append!(ests, DataFrame(
+            var = ["pe_infec", 
+                   "pe_sym", 
+                   "pe_asym", 
+                   "eff_sym_infec", 
+                   "eff_n_infec", 
+                   "eff_n_sym", 
+                   "eff_n_asym"],
+            value = [1 .- ests.value[ests.var .== "i_m"] ./ ests.value[ests.var .== "i_p"];
+                     1 .- ests.value[ests.var .== "s_m"] ./ ests.value[ests.var .== "s_p"];
+                     1 .- ests.value[ests.var .== "a_m"] ./ ests.value[ests.var .== "a_p"];
+                     ests.value[ests.var .== "s_i_m"] ./ ests.value[ests.var .== "s_i_p"];
+                     ests.value[ests.var .== "n_i_m"] ./ ests.value[ests.var .== "n_i_p"];
+                     ests.value[ests.var .== "n_s_m"] ./ ests.value[ests.var .== "n_s_p"];
+                     ests.value[ests.var .== "n_a_m"] ./ ests.value[ests.var .== "n_a_p"]]))
+
+    if return_counts
+        return counts
+    else
+        return ests
+    end
+end'))
+
+invisible(JuliaConnectoR::juliaEval("# wrapper to fit the collapsed model to npos or nneg
+function get_estimates_collapsed(model_fitted; sims_per_subj, model_number)
+
+    # models for prediction
+    model_pred = setup_collapsed_model(; make_pars = false, data = make_dat4pred(model_fitted.data), SamplingWeights = model_fitted.SamplingWeights, model_number = model_number)
+
+    # set parameters
+    set_parameters!(model_pred, model_fitted.parameters)
+   
+    # simulate paths
+    paths_pred = simulate(model_pred; nsim = sims_per_subj, paths = true, data = false)
+
+    # summarize paths
+    ests = summarize_paths_collapsed(paths_pred, model_pred)
+
+    # exit
+    return ests
+end"))
+
+ests <- as.data.frame(JuliaConnectoR::juliaCall("DataFrame", JuliaConnectoR::juliaEval("ests = get_estimates_collapsed(model_fitted; sims_per_subj = sims_per_subj, model_number = 3)")))
+```
+
+
+```{r, echo=F, purl=F}
+knitr::kable(ests, "html") %>% kableExtra::kable_styling() %>% kableExtra::scroll_box(width = "800px", height = "300px")
+```
+
+The `work_function` shown below is the wrapper for one simulation. To reproduce the results in the paper, you can simulate 1,000,000 datasets (each with 100 simulations per subject), where seed1 is sequenced from 1:1000, and seed2 is sequenced from 0:1001 for each value of seed1. Model number 3 represents the collpased 5-state model used to fit the data from the REGEN-2069 trial. 
+
+
+```{r, warning=FALSE, message=F}
+JuliaConnectoR::juliaEval("# wrapper for one simulation
+function work_function(;seed1, seed2, model_number, nulleff)
+
+    Random.seed!(seed1)
+
+    # set up model for simulation
+    model_full_sim = setup_full_model(; make_pars = true, data = nothing, nulleff = nulleff, n_per_arm = 800)
+        
+    # simulate paths
+    paths = simulate(model_full_sim; nsim = 1, paths = true, data = false)[:,1]
+
+    # make dataset
+    dat = reduce(vcat, map(x -> observe_subjdat(x, model_full_sim, model_number), paths))
+
+    # set second seed
+    Random.seed!(seed2)
+
+    ### set up model for fitting
+    # set sims_per_subj
+    sims_per_subj = 100
+
+    # subject weights
+    if seed2 == 0
+        # initialize bookkeeping for weights
+        subjweights = @chain dat begin
+            groupby(:id)
+            @combine(:mab = first(:mab),
+                     :sero = first(:sero),
+                     :weight = 1.0)
+        end
+    else
+        # initialize bookkeeping for weights
+        subjweights = @chain dat begin
+            groupby(:id)
+            @combine(:mab = first(:mab),
+                     :sero = first(:sero))
+            groupby(:mab)
+            @transform(:weight = length(:id) * vec(rand(Dirichlet(ones(length(:id))),1)))
+         end
+    end
+
+    # fit models
+    model_fitted = fit_collapsed(dat; model_number = model_number, SamplingWeights = subjweights.weight)
+        
+    # get estimates
+    ests = get_estimates_collapsed(model_fitted; sims_per_subj = sims_per_subj, model_number = model_number)
+        
+    ### return results
+    return DataFrame(simnum = seed1, iter = seed2, model_number = model_number, var = ests.var, est = ests.value)
+end")
+```
+
+
+
+
+
