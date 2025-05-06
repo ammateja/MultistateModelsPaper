@@ -1,0 +1,30 @@
+Quantity,Truth
+Pr(Infec. | Plac.),0.7947341406250001
+Pr(Infec. | mAb),0.40695030273437505
+Pr(Sympt. | Plac.),0.42949179687500005
+Pr(Sympt. | mAb),0.12359398437499998
+Pr(Asympt. | Plac.),0.3652423437499999
+Pr(Asympt. | mAb),0.28335631835937497
+"Pr(Sympt. | Infec., Plac.)",0.5404220759222746
+"Pr(Sympt. | Infec., mAb)",0.30370800779792867
+"Pr(Asympt. | Infec., Plac.)",0.4595779240777253
+"Pr(Asympt. | Infec., mAb)",0.6962919922020713
+"Pr(N+ | Infec., Plac.)",0.7145531396767372
+"Pr(N+ | Infec., mAb)",0.37774034111241556
+"Pr(N+ | sympt., Plac.)",0.8370481022791912
+"Pr(N+ | sympt., mAb)",0.5723190915319597
+"Pr(N+ | asympt., Plac.)",0.570510713862572
+"Pr(N+ | asympt., mAb)",0.2928691303003344
+RMTI | Plac.,1.725759862171514
+RMTI | mAb,2.970485727474395
+RMPCR+ | Plac.,1.604585035554781
+RMPCR+ | mAb,1.1632447439716278
+Pr(Detected | Plac.),0.7667861413594003
+Pr(Detected | mAb),0.6997255884444051
+PE for infec.,0.48793757269829413
+PE for sympt. infec.,0.7122195427686181
+PE for asympt. infec.,0.2241536986046354
+RR for sympt. | infec.,0.5620026301243233
+RR for N+ | infec.,0.528647183248135
+RR for N+ | sympt.,0.6837445065714192
+RR for N+ | asympt.,0.5133791481958968

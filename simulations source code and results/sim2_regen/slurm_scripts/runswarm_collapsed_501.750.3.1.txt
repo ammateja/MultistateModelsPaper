@@ -1,0 +1,1 @@
+swarm --module julia --noht --merge-output --logdir ./swarmlogs -g 8 --time-per-subjob=10-00:00:00 --partition=norm --sbatch '--constraint=ibhdr100' regen_sim_collapsed_501.750.3.1.swarm

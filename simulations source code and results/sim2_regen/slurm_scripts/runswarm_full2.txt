@@ -1,0 +1,1 @@
+swarm --module julia --noht --merge-output --logdir ./swarmlogs -g 30 --time-per-subjob=10-00:00:00 --partition norm --sbatch '--constraint=ibhdr100' regen_sim_full2.swarm

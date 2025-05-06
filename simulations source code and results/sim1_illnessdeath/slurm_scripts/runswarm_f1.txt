@@ -1,0 +1,1 @@
+swarm --module julia --noht --merge-output --logdir ./swarmlogs -g 10 --time-per-subjob=0-04:00:00 --partition quick,norm --sbatch '--constraint=ibhdr100' illnessdeath_f1.swarm

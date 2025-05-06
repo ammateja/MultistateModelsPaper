@@ -1,0 +1,17 @@
+[deps]
+ArraysOfArrays = "65a8f2f4-9b39-5baf-92e2-a9cc46fdf018"
+BSON = "fbb218c0-5317-5bc6-957e-2ee96dd4b1f0"
+BSplineKit = "093aae92-e908-43d7-9660-e50ee39d5a0a"
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+Chain = "8be319e6-bccf-4806-a6f7-6fae938471bc"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+DataFramesMeta = "1313f7d8-7da2-5740-9ea0-a2ca25f37964"
+Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+MIMEs = "6c6e2e6c-3030-632d-7369-2d6c69616d65"
+MultistateModels = "534e5a79-9002-43e8-8020-86faf45474d0"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+PrettyTables = "08abe8d2-0d0c-5749-adfa-8a2ac140af0d"
+StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
+
+[extras]
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"

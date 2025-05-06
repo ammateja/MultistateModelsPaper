@@ -1,0 +1,9 @@
+Quantity,Truth
+PFS,0.08205228125000001
+Pr(progression),0.5506796250000001
+Pr(death w/ progression),0.3488264375
+Pr(death w/o progression),0.36726809374999997
+RMPFST,0.42261828614950986
+Time to prog. given prog.,0.37102466773293974
+Time to prog. or EoF,0.6536357662597547
+Illness duration,0.37823372653774884
