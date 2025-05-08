@@ -1,12 +1,12 @@
 ---
-title: "Fitting a 5-state multistate model using MultistateModels.jl"
+title: "Analysis of a simulated dataset based on the REGEN-2069 trial"
 author: "Allyson Mateja, Rapha&euml;l Morsomme, C. Jason Liang, Dean A. Follmann, Meagan P. O'Brien, Chenguang Wang, Jonathan Fintzi"
 date: "`r Sys.Date()`"
 output: 
   rmarkdown::html_vignette:
     code_folding: hide
 vignette: >
-  %\VignetteIndexEntry{Fitting a 5-state multistate model using MultistateModels.jl}
+  %\VignetteIndexEntry{Analysis of a simulated dataset based on the REGEN-2069 trial}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -23,37 +23,7 @@ set.seed(1)
 
 # Overview
 
-This vignette demonstrates how to simulate data with a similar structure to the Regeneron data used as a motivating example in the paper "Assessing treatment efficacy for interval censored endpoints using multistate semi-Markov models fit to multiple data streams". This simulation uses R code to connect to the `MultistateModels.jl` Julia package. 
-
-The analysis of the REGEN-2069 trial data aims to characterize the effect of mAb on infection and seroconversion, and to quantify the duration of PCR positivity. Inference is based on the model, shown below, which has a na&iuml;ve uninfected state, and four post-infection states characterized by symptom history and whether SARS-CoV-2 infection is, or has ceased to be, detectable by PCR. 
-
-
-```{r, echo=FALSE, fig.cap="Model for infection, symptoms, and seroconversion. Solid arrows represent transitions. Dash-dotted lines depict final serology status.", purl=F}
-knitr::include_graphics("REGEN.PNG")
-```
-
-The data consist of symptom onset times, seroconversion at
-four weeks, and PCR measurements roughly every week throughout the efficacy assessment period
-(EAP), with some variation in the visit times to emulate a realistic trial.
-
-Trials were simulated from a more complicated semi-Markov model with nine states - a na&iuml;ve uninfected state, and eight post-infection states characterized by symptom history, PCR positivity, and seroconversion. 
-
-```{r, echo=FALSE, fig.cap="Direct transitions between states in the model for clinical and immunological progression from which participant histories were simulated.", purl=F}
-knitr::include_graphics("full_model.PNG")
-```
-
-The transitions from na&iuml;ve to PCR+ without symptoms and from PCR+ without symptoms
-to diseased were assigned Weibull transition intensities, while the remainder of the transitions
-had exponential intensities. We set the simulation parameters so that subjects receiving mAb
-have lower rates of infection and seroconversion along with shorter durations of PCR positivity.
-
-```{r, echo=FALSE, fig.cap="Parameterization and parameter values for transition intensities in the simulation model.", purl=F}
-knitr::include_graphics("full_model_params.PNG")
-```
-
-In this example, clinical histories for 1600 participants (800 per arm) are simulated in a hypothetical study to mimic data from the REGEN-2069 trial. 
-
-Clinical data was accrued at baseline and 3 subsequent visits. 
+This vignette demonstrates how to simulate and analyze data with a similar structure to the Regeneron data used as a motivating example in the paper "Assessing treatment efficacy for interval censored endpoints using multistate semi-Markov models fit to multiple data streams". This simulation uses R code to connect to the `MultistateModels.jl` Julia package. 
 
 # Installation and Setup
 
@@ -105,7 +75,21 @@ if (JuliaConnectoR::juliaSetupOk()){
 
 If there is an error, see the help page for the `JuliaConnectoR-package` for more details. 
 
-# Model
+# Simulated Data
+
+Data were simulated from a semi-Markov model with nine states - a na&iuml;ve uninfected state, and eight post-infection states characterized by symptom history, PCR positivity, and seroconversion. The transitions from na&iuml;ve to PCR+ without symptoms and from PCR+ without symptoms to diseased were assigned Weibull transition intensities, while the remainder of the transitions had exponential intensities. We set the simulation parameters so that subjects receiving mAb have lower rates of infection and seroconversion along with shorter duration of PCR positivity.
+
+```{r, echo=FALSE, fig.cap="Direct transitions between states in the model for clinical and immunological progression from which participant histories were simulated.", purl=F}
+knitr::include_graphics("full_model.PNG")
+```
+
+
+```{r, echo=FALSE, fig.cap="Parameterization and parameter values for transition intensities in the simulation model.", purl=F}
+knitr::include_graphics("full_model_params.PNG")
+```
+
+
+# Data Analysis
 
 First, we ensure that the necessary Julia packages are loaded. 
 
@@ -164,7 +148,7 @@ function makepcrs(;ntimes=4)
 end"))
 ```
 
-We start with the full 9-state model; a dataset is created using simulated PCR assessment times based on the `makepcrs` function above, a multistate model is initialized for simulation, and the transition intensities are set to the starting values as described in `makepars`.  
+We start with the full 9-state model; a data set is created using simulated PCR assessment times based on the `makepcrs` function above, a multistate model is initialized for simulation, and the transition intensities are set to the starting values as described in `makepars`.  
 
 Sample paths are then simulated for each subject.
 
@@ -218,8 +202,26 @@ end'))
 invisible(JuliaConnectoR::juliaEval("Random.seed!(123)"))
 invisible(JuliaConnectoR::juliaEval("model_full_sim = setup_full_model(; make_pars = true, data = nothing, nulleff = 1, n_per_arm = 800)"))
 
-invisible(JuliaConnectoR::juliaEval("paths = simulate(model_full_sim; nsim = 1, paths = true, data = false)[:,1]"))
+paths <- invisible(JuliaConnectoR::juliaEval("paths = simulate(model_full_sim; nsim = 1, paths = true, data = false)[:,1]"))
 ```
+
+```{r, warning=FALSE, message=FALSE}
+pathsR <- JuliaConnectoR::juliaGet(paths)
+paths_list <- lapply(pathsR, function(x){data.frame(id=rep(x$subj, length(x$times)), times=x$times, states=x$states)})
+paths_df <- do.call("rbind", paths_list)
+```
+
+Below we show concatenated sample paths from the first 8 subjects from the full 9-state model. Data are continuously observed, and in this model, serology was assessed weekly. 
+
+
+```{r, echo=FALSE, purl=F}
+knitr::kable(head(paths_df, n=30), "html") %>% kableExtra::kable_styling() %>% kableExtra::scroll_box(width = "800px", height = "300px")
+```
+
+
+In reality, serology was not assessed weekly so we can't fit the simulation model as it is not identifiable. Therefore, we fit the collapsed model shown below and and incorporate serology as explained in the manuscript. 
+
+To get from the nine-state model to the five-state model, states 2 + 3, 4 + 5, 6 + 7, and 8 + 9 are collapsed together. 
 
 Functions below collapse the full 9-state model into the smaller 5-state model. In `observe_subjdat`, we combine the observed visit times for each subject with their simulated sample paths. 
 
@@ -454,7 +456,21 @@ function observe_subjdat(path, model, model_number)
 end"))
 ```
 
-The setup of this dataset is shown below (only the first 30 rows are displayed) for the collapse model using Weibull and exponential transition intensities (model number 3): 
+
+The analysis of the REGEN-2069 trial data aims to characterize the effect of mAb on infection and seroconversion, and to quantify the duration of PCR positivity. Inference is based on the model, shown below, which has a na&iuml;ve uninfected state, and four post-infection states characterized by symptom history and whether SARS-CoV-2 infection is, or has ceased to be, detectable by PCR. 
+
+In this example, clinical histories for 1600 participants (800 per arm) are simulated in a hypothetical study to mimic data from the REGEN-2069 trial. PCR data was assessed approximately weekly for 4 weeks, with some variability between participants to reflect the reality of a real-world trial. Symptom onset was observed continuously, and serology assessment was conducted at baseline and at the last study visit. 
+
+
+```{r, echo=FALSE, fig.cap="Model for infection, symptoms, and seroconversion. Solid arrows represent transitions. Dash-dotted lines depict final serology status.", purl=F}
+knitr::include_graphics("REGEN.PNG")
+```
+
+
+The collapsed data set using Weibull and exponential transition intensities (model number 3) is shown below (only the first 30 rows are displayed). Each row represents a time interval (with start and stop times `tstart` and `tstop`), with states at `tstart` shown in `statefrom` and states at `tstop` shown in `stateto`. Generally, `obstype` is set to 2 as the exact time of that transition is unknown. `obstype` = 1 when the transition is directly observed (e.g. death). Notice that 24 participants in the mAb arm and 70 participants in the placebo arm are identified only by serology and hence we encode their unknown state in the `obstype` variable in the data so the software knows to treat this as a latent state where either compartment 1 or 3 are possible.
+
+The variable `mab` represents the treatment arm, and `pcr`, `covid` and `sero` represent PCR testing results, symptoms, and and serology results, respectively, at each transition. 
+
 
 ```{r, warning=FALSE, message=F}
 dat <- JuliaConnectoR::juliaEval("dat = reduce(vcat, map(x -> observe_subjdat(x, model_full_sim, 3), paths))")
@@ -462,10 +478,40 @@ dat <- JuliaConnectoR::juliaEval("dat = reduce(vcat, map(x -> observe_subjdat(x,
 df <- as.data.frame(JuliaConnectoR::juliaEval("dat"))
 ```
 
+
 ```{r, echo=FALSE, purl=F}
 knitr::kable(head(df, n=30), "html") %>% kableExtra::kable_styling() %>% kableExtra::scroll_box(width = "800px", height = "300px")
 ```
 
+The table below shows a summary of the data:
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+table_s16 <- df %>% 
+  group_by(id, mab) %>% 
+  summarize(n_covid = sum(covid, na.rm=T), n_sero = sum(as.numeric(sero, na.rm=T)), 
+            n_pcr = sum(pcr, na.rm=T)) %>%
+  mutate(group = ifelse(n_covid==0 & n_sero == 0 & n_pcr == 0, 1, 
+         ifelse(n_covid==0 & n_sero > 0 & n_pcr == 0, 2, 
+                ifelse(n_covid==0 & n_sero == 0 & n_pcr > 0, 3, 
+                       ifelse(n_covid==0 & n_sero > 0 & n_pcr > 0, 4, 
+                              ifelse(n_covid > 0 & n_sero == 0 & n_pcr > 0, 5, 
+                                     ifelse(n_covid > 0 & n_sero > 0 & n_pcr > 0, 6, NA))))))) %>%
+  ungroup() %>%
+  group_by(group, mab) %>%
+  summarize(n=n()) %>%
+  as.data.frame() %>%
+  mutate(mab=factor(mab, levels = c(1, 0), labels = c("mAb", "Placebo"))) %>% 
+  arrange(group, mab) %>%
+  tidyr::pivot_wider(names_from = "mab", values_from = "n") %>%
+  mutate(Symp = c("No", "No", "No", "No", "Yes", "Yes"), `PCR+` = c("No", "No", "Yes", "Yes", "Yes", "Yes"), 
+         `Sero+` = c("No", "Yes", "No", "Yes", "No", "Yes"))
+
+names(table_s16)[c(2:3)] <- c("mAb (N=800)", "Placebo (N=800)")
+```
+
+```{r, echo=FALSE, purl=F}
+knitr::kable(table_s16[ ,c(4:6, 2:3)], "html") %>% kableExtra::kable_styling()
+```
 
 
 We can now re-create the collapsed model with the simulated data. We initialize parameters to set the starting values of the transition intensities to MLEs of the Markov model and fit the model, which is now setup for inference. 
@@ -496,7 +542,7 @@ function fit_collapsed(dat; model_number, SamplingWeights = nothing)
     initialize_parameters!(model_fit)
 
     # fit models
-    model_fitted = fit(model_fit; verbose = true, compute_vcov = false, ess_target_initial = 50, ascent_threshold = 0.2, stopping_threshold = 0.2, tol = 0.01)
+    model_fitted = fit(model_fit; verbose = true, compute_vcov = false, maxiter = 500, ess_target_initial = 100, ascent_threshold = 0.2, stopping_threshold = 0.2, tol = 0.01)
 
     return model_fitted
 end"))
@@ -680,6 +726,22 @@ function summarize_paths_collapsed(paths_pred, model_pred; return_counts = false
 end'))
 
 invisible(JuliaConnectoR::juliaEval("# wrapper to fit the collapsed model to npos or nneg
+function get_paths_pred_collapsed(model_fitted; sims_per_subj, model_number)
+
+    # models for prediction
+    model_pred = setup_collapsed_model(; make_pars = false, data = make_dat4pred(model_fitted.data), SamplingWeights = model_fitted.SamplingWeights, model_number = model_number)
+
+    # set parameters
+    set_parameters!(model_pred, model_fitted.parameters)
+   
+    # simulate paths
+    paths_pred = simulate(model_pred; nsim = sims_per_subj, paths = true, data = false)
+
+    return paths_pred
+end"))
+
+
+invisible(JuliaConnectoR::juliaEval("# wrapper to fit the collapsed model to npos or nneg
 function get_estimates_collapsed(model_fitted; sims_per_subj, model_number)
 
     # models for prediction
@@ -698,19 +760,173 @@ function get_estimates_collapsed(model_fitted; sims_per_subj, model_number)
     return ests
 end"))
 
+paths_pred <- JuliaConnectoR::juliaEval("paths_pred = get_paths_pred_collapsed(model_fitted; sims_per_subj = sims_per_subj, model_number = 3)")
 ests <- as.data.frame(JuliaConnectoR::juliaCall("DataFrame", JuliaConnectoR::juliaEval("ests = get_estimates_collapsed(model_fitted; sims_per_subj = sims_per_subj, model_number = 3)")))
+
+
+ests$var <- c("Pr(Infec. | Plac.)", "Pr(Infec. | mAb)", "Pr(Sympt. | Plac.)", "Pr(Sympt. | mAb)", "Pr(Asympt. | Plac.)", "Pr(Asympt. | mAb)", "Pr(Sympt. | Infec., Plac.)", "Pr(Sympt. | Infec., mAb)", "Pr(Asympt. | Infec., Plac.)", "Pr(Asympt. | Infec., mAb)", "Pr(N+ | Infec., Plac.)", "Pr(N+ | Infec., mAb)", "Pr(N+ | sympt., Plac.)", "Pr(N+ | sympt., mAb)", "Pr(N+ | asympt., Plac.)", "Pr(N+ | asympt., mAb)", "RM TI | Plac.", "RM TI | mAb", "RM PCR+ | Plac.", "RM PCR+ | mAb", "Pr(Detected | Plac.)", "Pr(Detected | mAb)", "PE for infec.", "PE for sympt. infec.", "PE for asympt. infec.", "RR for sympt. | infec.", "RR for N+ | infec.", "RR for N+ | sympt.", "RR for N+ | asympt.")
 ```
 
 
 ```{r, echo=F, purl=F}
-knitr::kable(ests, "html") %>% kableExtra::kable_styling() %>% kableExtra::scroll_box(width = "800px", height = "300px")
+knitr::kable(ests, "html", digits=3) %>% kableExtra::kable_styling() %>% kableExtra::scroll_box(width = "800px", height = "300px")
 ```
 
-The `work_function` shown below is the wrapper for one simulation. To reproduce the results in the paper, you can simulate 1,000,000 datasets (each with 100 simulations per subject), where seed1 is sequenced from 1:1000, and seed2 is sequenced from 0:1001 for each value of seed1. Model number 3 represents the collpased 5-state model used to fit the data from the REGEN-2069 trial. 
+Pr = Probability, RMIFT = restricted mean infection free time, RM PCR+ = restricted mean duration of PCR+, PE = protective efficacy, RR = relative risk, N+ = seropositive. RM TI is the arithmetic mean over individuals of the the predicted days to infection or maximum follow-up for each individual, whichever is less. RM PCR+ is the arithmetic mean days during which individuals are detectable by PCR or the maximum follow-up for each individual, whichever is less. RR is the ratio of probabilities of the specified event, mAb divided by placebo. PE is 1 - RR, i.e., the reduction in relative risk.
+
+
+
+```{r, echo=F}
+paths_predR <- JuliaConnectoR::juliaGet(paths_pred)
+#paths_pred_fullR <- JuliaConnectoR::juliaGet(paths_pred_full)
+
+dat2 <- JuliaConnectoR::juliaEval("dat2 = reduce(vcat, map(x -> observe_subjdat(x, model_full_sim, 2), paths))")
+df2 <- as.data.frame(JuliaConnectoR::juliaEval("dat2"))
+
+
+times <- seq(0, 4, 0.05)
+times_new <- seq(0, 4, 0.01)
+
+any_infection <- df2 %>% group_by(id) %>%
+  mutate(n=n(), any_infection = ifelse(sum(pcr) >= 1 | sum(sero) >= 1 | sum(covid) >= 1, 1, 0), 
+         time_infection = ifelse(any_infection==0, 0, min(tstop[pcr==1 | sero==1 | covid==1]))) %>%
+  slice_head()
+ 
+inc_any_mab <- rep(0, length(times))
+inc_any_placebo <- rep(0, length(times))
+ 
+for (i in 1:length(times)) {
+ 
+   inc_any_mab[i] <- nrow(any_infection[any_infection$mab==1 & any_infection$time_infection <= times[i] & any_infection$any_infection==1, ])
+   inc_any_placebo[i] <- nrow(any_infection[any_infection$mab==0 & any_infection$time_infection <= times[i] & any_infection$any_infection==1, ])
+   
+}
+ 
+incidence1 <- data.frame(times = rep(times*7, 2), inc=c(inc_any_mab/800, inc_any_placebo/800), group=c(rep("mAb", length(times)), rep("Placebo", length(times))))
+
+
+inc_confirmed_mod <- rep(0, length(paths_predR))
+ids <- rep(0, length(paths_predR))
+
+for (i in 1:length(paths_predR)) {
+  
+  if (paths_predR[[i]]$states[2] > 1) {
+    ids[i] <- paths_predR[[i]]$subj
+    inc_confirmed_mod[i] <- paths_predR[[i]]$times[2]
+  } 
+
+}
+
+confirmed_infection_model <- data.frame(id=ids, time_infection=inc_confirmed_mod, confirmed_infection = ifelse(inc_confirmed_mod==0, 0, 1)) %>%
+  left_join(any_infection[ ,c("id", "mab")], by="id")
+
+
+inc_confirmed_mab_mod <- rep(0, length(times_new))
+inc_confirmed_placebo_mod <- rep(0, length(times_new))
+
+for (i in 1:length(times_new)) {
+  
+  inc_confirmed_mab_mod[i] <- nrow(confirmed_infection_model[confirmed_infection_model$mab==1 & confirmed_infection_model$time_infection <= times_new[i] & confirmed_infection_model$confirmed_infection==1, ])
+  inc_confirmed_placebo_mod[i] <- nrow(confirmed_infection_model[confirmed_infection_model$mab==0 & confirmed_infection_model$time_infection <= times_new[i] & confirmed_infection_model$confirmed_infection==1, ])
+  
+}
+
+incidence2 <- data.frame(times = rep(times_new*7, 2), inc=c(inc_confirmed_mab_mod/80000, inc_confirmed_placebo_mod/80000), group=c(rep("mAb", length(times_new)), rep("Placebo", length(times_new))))
+```
+
+
+
+```{r, echo=F}
+
+confirmed_infection <- df %>% group_by(id) %>%
+   mutate(n=n(), confirmed_infection = ifelse(sum(covid) >= 1, 1, 0), 
+          time_infection = ifelse(confirmed_infection==0, 0, min(tstop[covid==1 | pcr==1]))) %>%
+   slice_head()
+ 
+inc_confirmed_mab <- rep(0, length(times))
+inc_confirmed_placebo <- rep(0, length(times))
+ 
+for (i in 1:length(times)) {
+   
+   inc_confirmed_mab[i] <- nrow(confirmed_infection[confirmed_infection$mab==1 & confirmed_infection$time_infection <= times[i] & confirmed_infection$confirmed_infection==1, ])
+   inc_confirmed_placebo[i] <- nrow(confirmed_infection[confirmed_infection$mab==0 & confirmed_infection$time_infection <= times[i] & confirmed_infection$confirmed_infection==1, ])
+   
+}
+ 
+incidence_conf1 <- data.frame(times = rep(times*7, 2), inc=c(inc_confirmed_mab/800, inc_confirmed_placebo/800), group=c(rep("mAb", length(times)), rep("Placebo", length(times))))
+
+
+
+
+
+
+inc_confirmed_mod_full <- rep(0, length(paths_predR))
+ids_full <- rep(0, length(paths_predR))
+
+for (i in 1:length(paths_predR)) {
+  
+  if (sum(as.numeric(c(4) %in% paths_predR[[i]]$states)) >= 1) {
+    ids_full[i] <- paths_predR[[i]]$subj
+    inc_confirmed_mod_full[i] <- min(paths_predR[[i]]$times[paths_predR[[i]]$states %in% c(4)])
+  } 
+
+}
+
+confirmed_infection_model_full <- data.frame(id=ids_full, time_infection=inc_confirmed_mod_full, confirmed_infection = ifelse(inc_confirmed_mod_full==0, 0, 1)) %>%
+  left_join(confirmed_infection[ ,c("id", "mab")], by="id")
+
+
+inc_confirmed_mab_mod_full <- rep(0, length(times_new))
+inc_confirmed_placebo_mod_full <- rep(0, length(times_new))
+
+for (i in 1:length(times_new)) {
+  
+  inc_confirmed_mab_mod_full[i] <- nrow(confirmed_infection_model_full[confirmed_infection_model_full$mab==1 & confirmed_infection_model_full$time_infection <= times_new[i] & confirmed_infection_model_full$confirmed_infection==1, ])
+  inc_confirmed_placebo_mod_full[i] <- nrow(confirmed_infection_model_full[confirmed_infection_model_full$mab==0 & confirmed_infection_model_full$time_infection <= times_new[i] & confirmed_infection_model_full$confirmed_infection==1, ])
+  
+}
+
+incidence_conf2 <- data.frame(times = rep(times_new*7, 2), inc=c(inc_confirmed_mab_mod_full/80000, inc_confirmed_placebo_mod_full/80000), group=c(rep("mAb", length(times_new)), rep("Placebo", length(times_new))))
+
+
+```
+
+
+The plot below shows the cumulative incidence of confirmed COVID-19 infection (A) and all-comer/any infection (B) by treatment arm. 
+Dots are from the initial simulated data. Solid lines correspond to the pointwise 
+maximum likelihood estimates.
+
+```{r, fig.height=6, fig.width=8, echo=F}
+ggplot() + 
+  geom_point(data=incidence_conf1, aes(x=times, y=inc, col=factor(group, levels = c("Placebo", "mAb")))) + 
+  geom_line(data=incidence_conf2, aes(x=times, y=inc, col=factor(group, levels = c("Placebo", "mAb"))), lwd=1) +
+  theme_bw() +
+  scale_color_manual(values = c("darkred", "blue")) +
+  labs(y = "Cumulative Incidence", x = "Days Since Enrollment", col = "Treatment", title="A", subtitle = "Confirmed COVID-19") +
+  scale_x_continuous(breaks = seq(0, 28, 7)) +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2))
+```
+
+
+
+```{r, fig.height=6, fig.width=8, echo=F}
+ggplot() + 
+  geom_point(data=incidence1, aes(x=times, y=inc, col=factor(group, levels = c("Placebo", "mAb")))) + 
+  geom_line(data=incidence2, aes(x=times, y=inc, col=factor(group, levels = c("Placebo", "mAb"))), lwd=1) +
+  theme_bw() +
+  scale_color_manual(values = c("darkred", "blue")) +
+  labs(y = "Cumulative Incidence", x = "Days Since Enrollment", col = "Treatment", title="B", subtitle = "All-comer infection") +
+  scale_x_continuous(breaks = seq(0, 28, 7)) +
+  scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, 0.2))
+```
+
+
+
+The `work_function` shown below is the wrapper for one simulation. To reproduce the results in the paper, you can simulate 1,000,000 data sets (each with 100 simulations per subject), where seed1 is sequenced from 1:1000, and seed2 is sequenced from 0:1001 for each value of seed1. Model number 3 represents the collapsed 5-state model used to fit the data from the REGEN-2069 trial. Source code for the data analysis can be found: https://github.com/ammateja/MultistateModelsPaper/tree/master/simulations%20source%20code%20and%20results.
 
 
 ```{r, warning=FALSE, message=F}
-JuliaConnectoR::juliaEval("# wrapper for one simulation
+invisible(JuliaConnectoR::juliaEval("# wrapper for one simulation
 function work_function(;seed1, seed2, model_number, nulleff)
 
     Random.seed!(seed1)
@@ -759,9 +975,8 @@ function work_function(;seed1, seed2, model_number, nulleff)
         
     ### return results
     return DataFrame(simnum = seed1, iter = seed2, model_number = model_number, var = ests.var, est = ests.value)
-end")
+end"))
 ```
-
 
 
 
