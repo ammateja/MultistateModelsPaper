@@ -87,3 +87,5 @@ In this simple setting, patients are healthy at the start of follow-
 up. The model has three states – healthy, ill, and dead – and three transitions — healthy to ill, healthy to dead, and ill to dead. Disease recurrence is interval censored but the time
 of death is exactly observed.
 
+The vignette `Regeneron-simulation` shows how to simulate and analyze data with a similar structure to the Regeneron data used as a motivating example in the paper "Assessing treatment efficacy for interval censored endpoints using multistate semi-Markov models fit to multiple data streams". 
+
