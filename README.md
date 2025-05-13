@@ -14,6 +14,10 @@ used to accompany the paper “Assessing treatment efficacy for interval
 censored endpoints using multistate semi-Markov models fit to multiple
 data streams”.
 
+For a version of the package that is under development and will
+eventually be released to CRAN, please refer to:
+<https://github.com/ammateja/multistatemodels>.
+
 ## Installation and Setup
 
 First, ensure `Julia` (≥ version 1.10) is installed. Julia can be
